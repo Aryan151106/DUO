@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   doc,
+  setDoc,
   updateDoc,
+  arrayUnion,
   onSnapshot,
   serverTimestamp,
   collection,
@@ -150,6 +152,11 @@ export async function createTogetherRoom(
     throw new Error('You must be signed in to create a together room.');
   }
 
+  const authState = useAuthStore.getState();
+  const coupleId = couple?.id || 'couple-duo';
+  const partnerId = authState.partnerUser?.id || null;
+  const displayName = authState.currentUser?.displayName || auth.currentUser.displayName || 'Partner';
+
   const idToken = await auth.currentUser.getIdToken();
   const res = await fetch(`${socketUrl}/api/livekit/create-room`, {
     method: 'POST',
@@ -157,7 +164,12 @@ export async function createTogetherRoom(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ type, initialTitle }),
+    body: JSON.stringify({
+      type,
+      initialTitle,
+      coupleId,
+      displayName,
+    }),
   });
 
   if (!res.ok) {
@@ -168,6 +180,36 @@ export async function createTogetherRoom(
   const data = await res.json();
   if (!data.token) {
     throw new Error('Backend failed to issue a LiveKit token for this session.');
+  }
+
+  // Ensure durable Firestore room document exists under authorized client credentials
+  try {
+    const roomRef = doc(db, 'togetherRooms', data.roomId);
+    await setDoc(roomRef, {
+      roomId: data.roomId,
+      type,
+      status: 'waiting',
+      hostUid: auth.currentUser.uid,
+      memberUids: [auth.currentUser.uid, ...(partnerId ? [partnerId] : [])],
+      coupleId,
+      roomName: data.roomName,
+      serverUrl: data.serverUrl,
+      createdAt: serverTimestamp(),
+      endedAt: null,
+      revision: 1,
+      study: type === 'study' ? {
+        mode: 'focus',
+        durationSeconds: 25 * 60,
+        startedAt: null,
+        pausedRemainingSeconds: 25 * 60,
+      } : null,
+      movie: type === 'movie' ? {
+        screenShareOwnerUid: null,
+        title: initialTitle || 'Movie Night 🍿',
+      } : null,
+    }, { merge: true });
+  } catch (fsErr) {
+    console.warn('[TogetherRooms] Client setDoc togetherRooms notice:', fsErr);
   }
 
   return {
@@ -202,6 +244,11 @@ export async function joinTogetherRoom(
     throw new Error('You must be signed in to join a together room.');
   }
 
+  const authState = useAuthStore.getState();
+  const couple = authState.couple;
+  const coupleId = couple?.id || 'couple-duo';
+  const displayName = authState.currentUser?.displayName || auth.currentUser.displayName || 'Partner';
+
   const idToken = await auth.currentUser.getIdToken();
   const res = await fetch(`${socketUrl}/api/livekit/join-room`, {
     method: 'POST',
@@ -209,7 +256,11 @@ export async function joinTogetherRoom(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${idToken}`,
     },
-    body: JSON.stringify({ roomId }),
+    body: JSON.stringify({
+      roomId,
+      coupleId,
+      displayName,
+    }),
   });
 
   if (!res.ok) {
@@ -220,6 +271,17 @@ export async function joinTogetherRoom(
   const data = await res.json();
   if (!data.token) {
     throw new Error('Backend did not return a LiveKit token for this room.');
+  }
+
+  // Update Firestore room status to active and register participant
+  try {
+    await updateDoc(doc(db, 'togetherRooms', roomId), {
+      status: 'active',
+      memberUids: arrayUnion(auth.currentUser.uid),
+      lastActiveAt: serverTimestamp(),
+    });
+  } catch (fsErr) {
+    console.warn('[TogetherRooms] Client updateDoc togetherRooms notice:', fsErr);
   }
 
   return {
