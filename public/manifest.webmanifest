@@ -1,0 +1,51 @@
+{
+  "name": "AV — Aryan & Vidhi",
+  "short_name": "AV",
+  "description": "Aryan & Vidhi's private shared space.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFDF7",
+  "theme_color": "#FFFDF7",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chat (AV)",
+      "short_name": "Chat",
+      "description": "Open private AV chat",
+      "url": "/?action=chat",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Live Doodle",
+      "short_name": "Doodle",
+      "description": "Draw a live doodle together",
+      "url": "/?action=doodle",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's Tasks",
+      "short_name": "Tasks",
+      "description": "Check shared to-do list",
+      "url": "/?action=today",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}

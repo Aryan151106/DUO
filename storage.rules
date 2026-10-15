@@ -1,0 +1,90 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Helper function for couple membership check
+    function isMember(spaceId) {
+      return request.auth != null && (
+        (firestore.exists(/databases/(default)/documents/couples/$(spaceId)) && (
+          request.auth.uid in firestore.get(/databases/(default)/documents/couples/$(spaceId)).data.members ||
+          firestore.get(/databases/(default)/documents/couples/$(spaceId)).data.partnerA == request.auth.uid ||
+          firestore.get(/databases/(default)/documents/couples/$(spaceId)).data.partnerB == request.auth.uid
+        ))
+      );
+    }
+
+    // User profile avatars
+    match /users/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId &&
+        request.resource.size <= 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    // 1. Doodles storage: Finished WebP/PNG images, thumbnails, and JSON strokes (max 5 MB)
+    match /spaces/{spaceId}/doodles/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/json'));
+      allow delete: if isMember(spaceId);
+    }
+    match /couples/{spaceId}/doodles/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) &&
+        request.resource.size <= 5 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') || request.resource.contentType.matches('application/json'));
+      allow delete: if isMember(spaceId);
+    }
+
+    // 2. Custom Sounds storage: Audio files uploaded by user (max 2 MB)
+    match /spaces/{spaceId}/sounds/{userId}/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) &&
+        request.auth.uid == userId &&
+        request.resource.size <= 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('audio/.*');
+      allow delete: if isMember(spaceId) && request.auth.uid == userId;
+    }
+    match /couples/{spaceId}/sounds/{userId}/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) &&
+        request.auth.uid == userId &&
+        request.resource.size <= 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('audio/.*');
+      allow delete: if isMember(spaceId) && request.auth.uid == userId;
+    }
+
+    // 3. Attachments storage: General chat and task attachments
+    match /spaces/{spaceId}/{folder}/{parentId}/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) && (
+        (request.resource.contentType.matches('video/.*') && request.resource.size <= 100 * 1024 * 1024) ||
+        (request.resource.contentType.matches('image/.*') && request.resource.size <= 25 * 1024 * 1024) ||
+        (
+          !request.resource.contentType.matches('application/x-msdownload.*') &&
+          !request.resource.contentType.matches('application/x-executable.*') &&
+          !request.resource.contentType.matches('application/x-sh.*') &&
+          !request.resource.contentType.matches('application/vnd.android.package-archive.*') &&
+          request.resource.size <= 50 * 1024 * 1024
+        )
+      );
+      allow delete: if isMember(spaceId);
+    }
+    match /couples/{spaceId}/{folder}/{parentId}/{fileName} {
+      allow read: if isMember(spaceId);
+      allow write: if isMember(spaceId) && (
+        (request.resource.contentType.matches('video/.*') && request.resource.size <= 100 * 1024 * 1024) ||
+        (request.resource.contentType.matches('image/.*') && request.resource.size <= 25 * 1024 * 1024) ||
+        (
+          !request.resource.contentType.matches('application/x-msdownload.*') &&
+          !request.resource.contentType.matches('application/x-executable.*') &&
+          !request.resource.contentType.matches('application/x-sh.*') &&
+          !request.resource.contentType.matches('application/vnd.android.package-archive.*') &&
+          request.resource.size <= 50 * 1024 * 1024
+        )
+      );
+      allow delete: if isMember(spaceId);
+    }
+  }
+}

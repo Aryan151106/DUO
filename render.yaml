@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: duo-socket-server
+    runtime: node
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: ALLOWED_ORIGINS
+        value: https://av-space-311906.web.app,https://duo-couples-app-8910.web.app,http://localhost:5173,http://127.0.0.1:5173
+      - key: LIVEKIT_URL
+        value: wss://av-space-cgq1lsbg.livekit.cloud
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false

@@ -1,0 +1,19 @@
+{
+  "name": "duo-socket-server",
+  "version": "1.0.0",
+  "description": "Duo Together Space real-time Socket.IO coordination server",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^12.7.0",
+    "livekit-server-sdk": "^2.19.1",
+    "socket.io": "^4.8.1"
+  }
+}

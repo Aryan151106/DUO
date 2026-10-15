@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duo Companion</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="widget-container">
+    <header class="header">
+      <div class="logo-group">
+        <span class="heart-icon">❤️</span>
+        <span class="brand-title">Duo</span>
+      </div>
+      <a href="http://127.0.0.1:5173" target="_blank" class="open-link" title="Open Duo App">↗ Full App</a>
+    </header>
+
+    <div class="partner-card">
+      <div class="avatar-wrap">
+        <img id="partner-avatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80" alt="Partner">
+        <span class="online-dot"></span>
+      </div>
+      <div class="partner-meta">
+        <div class="name-row">
+          <span id="partner-name">Sam</span>
+          <span class="badge">Active</span>
+        </div>
+        <div class="mood-text" id="partner-mood">Counting down the hours ✨</div>
+      </div>
+    </div>
+
+    <div class="reaction-row">
+      <button class="reaction-btn" data-emoji="❤️">❤️</button>
+      <button class="reaction-btn" data-emoji="😘">😘</button>
+      <button class="reaction-btn" data-emoji="🫂">🫂</button>
+      <button class="reaction-btn" data-emoji="✨">✨</button>
+      <button class="reaction-btn" data-emoji="🔥">🔥</button>
+    </div>
+
+    <div class="section-title">TODAY'S TO-DO</div>
+    <div class="task-list" id="task-list">
+      <div class="task-item" data-id="1">
+        <input type="checkbox" class="task-check" id="t1">
+        <label for="t1">Pick up anniversary flowers</label>
+      </div>
+      <div class="task-item" data-id="2">
+        <input type="checkbox" class="task-check" id="t2" checked>
+        <label for="t2">Review flight tickets</label>
+      </div>
+      <div class="task-item" data-id="3">
+        <input type="checkbox" class="task-check" id="t3">
+        <label for="t3">Call after dinner ✨</label>
+      </div>
+    </div>
+
+    <form id="quick-note-form" class="note-box">
+      <input type="text" id="note-input" placeholder="Leave a quick note...">
+      <button type="submit" id="send-note-btn">Send</button>
+    </form>
+    <div id="toast" class="toast hidden">Sent with love! 💕</div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

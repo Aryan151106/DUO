@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Duo — Couple Companion Widget",
+  "version": "1.0.0",
+  "description": "Desktop widget for Duo: see partner mood, urgent tasks, and send instant love reactions.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Duo Companion"
+  },
+  "permissions": ["storage"],
+  "icons": {
+    "128": "icon.png"
+  }
+}
