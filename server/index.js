@@ -78,7 +78,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : defaultAllowedOrigins;
 
 const isOriginAllowed = (origin) => {
-  if (!origin) return !isProduction; // allow non-browser clients (curl/health checks) in non-production
+  if (!origin) return true; // allow non-browser clients (curl/health checks/Render pings)
   if (allowedOrigins.includes(origin)) return true;
   if (origin.endsWith('.web.app') || origin.endsWith('.firebaseapp.com')) return true;
   if (!isProduction) return true;
@@ -91,7 +91,7 @@ app.use(
       if (isOriginAllowed(origin)) {
         return callback(null, true);
       }
-      return callback(new Error('Blocked by CORS policy'));
+      return callback(null, false);
     },
     credentials: true,
   })

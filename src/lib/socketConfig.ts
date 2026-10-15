@@ -90,12 +90,11 @@ export function getSocketServerUrl(): string {
       return `http://${hostname}:3001`;
     }
 
-    // 4. In production HTTPS environments, do NOT point to Firebase Hosting domain (it cannot serve WebSockets).
-    // Returning empty string directs the client to use built-in WebRTC CallRoom seamlessly.
-    return '';
+    // 4. In production HTTPS environments, default to the deployed Render server
+    return 'https://duo-socket-server.onrender.com';
   }
 
-  return '';
+  return 'https://duo-socket-server.onrender.com';
 }
 
 export function isSocketServerConfigured(): boolean {
