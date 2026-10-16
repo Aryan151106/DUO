@@ -8,6 +8,8 @@
  * 4. Progress tracking and toast feedback
  */
 
+import { isMobileOrConstrainedDevice } from './media';
+
 export interface SaveMediaOptions {
   fileName?: string;
   mimeType?: string;
@@ -63,7 +65,7 @@ export async function saveMediaToDevice(
 
     // 1. Mobile Web Share API with Files (iOS Safari & Android Chrome)
     // This allows iOS users to tap "Save Image" or "Save Video" to Camera Roll!
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isMobile = isMobileOrConstrainedDevice();
     if (isMobile && typeof navigator !== 'undefined' && 'canShare' in navigator) {
       try {
         const file = new File([blob], fileName, { type: mimeType });

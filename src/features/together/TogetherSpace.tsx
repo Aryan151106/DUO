@@ -7,11 +7,10 @@ import { soundManager, soundEffects } from '../../lib/sound';
 import {
   useWishlist,
   useScores,
-  useMessages,
-  useTasks,
   addWishlistItem,
   updateWishlistItem,
 } from '../../lib/firestore';
+import { useSharedMedia, type SharedMediaCategory } from '../../lib/sharedMedia';
 import confetti from 'canvas-confetti';
 import {
   Star,
@@ -23,7 +22,8 @@ import {
   Paperclip,
   Image as ImageIcon,
   Video as VideoIcon,
-  FileText,
+  Palette,
+  Loader2,
   Film,
   BookOpen,
 } from 'lucide-react';
@@ -50,7 +50,7 @@ export const TogetherSpace: React.FC = () => {
   const effectiveSession = activeTogetherRoom || activeSession;
   const queryClient = useQueryClient();
 
-  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'document'>('all');
+  const [mediaFilter, setMediaFilter] = useState<SharedMediaCategory>('all');
 
   // Wishlist State
   const [newWishTitle, setNewWishTitle] = useState('');
@@ -185,24 +185,32 @@ export const TogetherSpace: React.FC = () => {
       ? partnerUser
       : null;
 
-  // Shared Media Aggregation from Messages and Tasks: only active when user is in Media tab
+  // Shared Media Aggregation: Uses specialized paginated index instead of fetching 1000 messages
   const isMediaTab = togetherSubTab === 'media';
-  const { messages: firestoreMessages = [] } = useMessages(isMediaTab ? liveCoupleId : null, 1000);
-  const { tasks: firestoreTasks = [] } = useTasks(isMediaTab ? liveCoupleId : null);
+  const {
+    items: mediaItems,
+    loading: mediaLoading,
+    hasMore: mediaHasMore,
+    loadMore: mediaLoadMore,
+  } = useSharedMedia(isMediaTab ? liveCoupleId : null, mediaFilter, 30);
 
   const allAttachments: FileAttachment[] = React.useMemo(() => {
-    const chatMsgs = isDemoMode ? duoDataStore.getMessages() : firestoreMessages;
-    const taskList = isDemoMode ? duoDataStore.getTasks() : firestoreTasks;
-
-    const chatAtts = (chatMsgs as any[]).flatMap((m) => m.attachments || []);
-    const taskAtts = (taskList as any[]).flatMap((t) => t.attachments || []);
-    const combined = [...chatAtts, ...taskAtts];
-
-    if (mediaFilter !== 'all') {
-      return combined.filter((a) => a.type === mediaFilter);
-    }
-    return combined;
-  }, [isDemoMode, firestoreMessages, firestoreTasks, mediaFilter]);
+    return mediaItems.map((item) => ({
+      id: item.id,
+      type: item.category === 'videos' ? 'video' : 'image',
+      path: item.path || '',
+      thumbnailPath: item.thumbnailPath,
+      url: item.url,
+      thumbnailUrl: item.thumbnailUrl || item.url,
+      fileName: item.name || (item.category === 'doodles' ? 'Doodle.png' : 'Media'),
+      mimeType: item.category === 'videos' ? 'video/mp4' : 'image/jpeg',
+      size: item.size || 0,
+      width: item.width,
+      height: item.height,
+      uploadedBy: item.senderId || currentUser.id,
+      createdAt: item.createdAt,
+    }));
+  }, [mediaItems, currentUser.id]);
 
   const groupedMedia = React.useMemo(() => {
     const groups: Record<string, FileAttachment[]> = {};
@@ -576,26 +584,26 @@ export const TogetherSpace: React.FC = () => {
               </div>
 
               {/* Filter Chips */}
-              <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)]">
+              <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] overflow-x-auto scrollbar-none">
                 {[
                   { id: 'all', label: 'All', icon: Paperclip },
-                  { id: 'image', label: 'Photos', icon: ImageIcon },
-                  { id: 'video', label: 'Videos', icon: VideoIcon },
-                  { id: 'document', label: 'Docs', icon: FileText },
+                  { id: 'doodles', label: 'Doodles', icon: Palette },
+                  { id: 'photos', label: 'Photos', icon: ImageIcon },
+                  { id: 'videos', label: 'Videos', icon: VideoIcon },
                 ].map((f) => {
                   const Icon = f.icon;
                   return (
                     <button
                       key={f.id}
                       type="button"
-                      onClick={() => setMediaFilter(f.id as any)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-ui font-semibold transition-all cursor-pointer ${
+                      onClick={() => setMediaFilter(f.id as SharedMediaCategory)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-ui font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                         mediaFilter === f.id
-                          ? 'bg-[var(--accent)] text-[var(--text)] border border-[var(--border)] shadow-xs'
+                          ? 'bg-[var(--accent)] text-[var(--text)] border border-[var(--border)] shadow-xs font-bold'
                           : 'text-[var(--text-muted)] hover:text-[var(--text)]'
                       }`}
                     >
-                      <Icon className="w-3 h-3" />
+                      <Icon className="w-3.5 h-3.5" />
                       <span>{f.label}</span>
                     </button>
                   );
@@ -603,16 +611,23 @@ export const TogetherSpace: React.FC = () => {
               </div>
             </div>
 
-            {Object.keys(groupedMedia).length === 0 ? (
+            {mediaLoading && allAttachments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
+                <Loader2 className="w-6 h-6 animate-spin text-[var(--partner-a)] mb-2" />
+                <span className="font-ui text-xs">Opening shared memories…</span>
+              </div>
+            ) : Object.keys(groupedMedia).length === 0 ? (
               <div className="text-center py-12 px-6 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/40 my-2">
                 <div className="w-14 h-14 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center mx-auto mb-3 text-2xl shadow-xs">
-                  📸
+                  {mediaFilter === 'doodles' ? '🎨' : mediaFilter === 'videos' ? '🎬' : '📸'}
                 </div>
                 <h4 className="font-chunky text-lg font-bold text-[var(--text)] mb-1">
-                  No shared media yet
+                  No {mediaFilter === 'all' ? 'shared media' : mediaFilter} yet
                 </h4>
                 <p className="font-ui text-xs text-[var(--text-muted)] max-w-sm mx-auto">
-                  Send pictures, videos, or documents in chat or attach them to missions!
+                  {mediaFilter === 'doodles'
+                    ? 'Draw love doodles together in the Doodle tab to save them here!'
+                    : 'Share pictures and videos in chat or missions to keep them forever.'}
                 </p>
               </div>
             ) : (
@@ -632,6 +647,20 @@ export const TogetherSpace: React.FC = () => {
                     </div>
                   </div>
                 ))}
+
+                {mediaHasMore && (
+                  <div className="flex justify-center pt-2">
+                    <button
+                      type="button"
+                      onClick={mediaLoadMore}
+                      disabled={mediaLoading}
+                      className="px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-xs font-chunky font-bold text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      {mediaLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--partner-a)]" />}
+                      <span>Load older memories</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

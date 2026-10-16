@@ -19,9 +19,11 @@ export const supabase = hasSupabaseConfig
     });
 
 // High-fidelity BroadcastChannel for cross-tab & local real-time synchronization
-export const duoBroadcast = typeof window !== 'undefined'
-  ? new BroadcastChannel('duo_couple_realtime_channel')
-  : null;
+// Feature-detect BroadcastChannel before constructing to avoid startup crashes in older iOS/restricted WebViews
+export const duoBroadcast: BroadcastChannel | null =
+  typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+    ? new BroadcastChannel('duo_couple_realtime_channel')
+    : null;
 
 export interface RealtimeEnvelope<T = any> {
   type:

@@ -11,7 +11,7 @@
 
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { app } from './firebase';
-import { isCloudStorageAvailable, blobToDataUrl } from './storageService';
+import { isCloudStorageAvailable } from './storageService';
 
 export interface VoiceRecordingResult {
   blob: Blob;
@@ -285,10 +285,7 @@ export async function uploadVoiceNote(params: {
   const storagePath = `spaces/${spaceId}/chat/${messageId}/voice.${ext}`;
 
   if (!isCloudStorageAvailable()) {
-    onProgress?.(50);
-    const downloadUrl = await blobToDataUrl(blob);
-    onProgress?.(100);
-    return { downloadUrl, storagePath };
+    throw new Error('Cloud Storage is unavailable. Voice note cannot be uploaded without active storage.');
   }
 
   try {

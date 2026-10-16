@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Smartphone,
 } from 'lucide-react';
+import { isMobileOrConstrainedDevice } from '../../lib/media';
 
 export interface LiveKitMediaRoomProps {
   serverUrl: string;
@@ -104,11 +105,16 @@ export const LiveKitMediaRoom: React.FC<LiveKitMediaRoomProps> = ({
     setErrorMsg(null);
     setConnectionState(ConnectionState.Connecting);
 
+    const isMobile = isMobileOrConstrainedDevice();
+    const resolution = isMobile
+      ? { width: 640, height: 480, frameRate: 24 }
+      : VideoPresets.h720.resolution;
+
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
       videoCaptureDefaults: {
-        resolution: VideoPresets.h720.resolution,
+        resolution,
       },
     });
     roomRef.current = room;
@@ -260,14 +266,30 @@ export const LiveKitMediaRoom: React.FC<LiveKitMediaRoomProps> = ({
     return () => {
       isCancelled = true;
       try {
-        // Stop local tracks
+        // Stop and detach local tracks
         room.localParticipant.trackPublications.forEach((pub) => {
           if (pub.track) {
             try {
+              pub.track.detach();
               pub.track.stop();
             } catch {}
           }
         });
+        // Detach remote tracks from media elements
+        room.remoteParticipants.forEach((p) => {
+          p.trackPublications.forEach((pub) => {
+            if (pub.track) {
+              try {
+                pub.track.detach();
+              } catch {}
+            }
+          });
+        });
+        if (localVideoRef.current) localVideoRef.current.srcObject = null;
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+        if (screenShareVideoRef.current) screenShareVideoRef.current.srcObject = null;
+        if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+
         room.disconnect();
       } catch (e) {
         console.warn('[LiveKit] Disconnect cleanup notice:', e);

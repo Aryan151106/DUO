@@ -79,6 +79,83 @@ export function stopMediaStream(stream: MediaStream | null) {
 }
 
 /**
+ * Detects mobile or resource-constrained devices using multi-factor signals:
+ * 1. Coarse pointer detection (touch screens)
+ * 2. Navigator touch points (> 0)
+ * 3. Screen viewport dimensions (e.g. min dimension <= 768px)
+ * 4. User agent regex as secondary validation
+ * 5. Device memory / hardware concurrency if constrained
+ */
+export function isMobileOrConstrainedDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const isCoarsePointer =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches;
+
+  const hasTouch =
+    (typeof navigator !== 'undefined' &&
+      ((navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+        ((navigator as any).msMaxTouchPoints && (navigator as any).msMaxTouchPoints > 0))) ||
+    'ontouchstart' in window;
+
+  const isSmallScreen =
+    typeof window.screen !== 'undefined' &&
+    Math.min(window.screen.width, window.screen.height) <= 768;
+
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent || '' : '';
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile/i.test(ua);
+
+  const isConstrainedHardware =
+    typeof navigator !== 'undefined' &&
+    (((navigator as any).deviceMemory && (navigator as any).deviceMemory <= 4) ||
+      (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4));
+
+  if (isMobileUA) return true;
+  if (hasTouch && isCoarsePointer && isSmallScreen) return true;
+  if (isConstrainedHardware && hasTouch) return true;
+
+  return false;
+}
+
+/**
+ * Computes appropriate camera constraints:
+ * - 480p @ 24fps on phones to prevent thermal throttling, battery drain, and dropped frames.
+ * - 720p @ 30fps on desktop for high fidelity.
+ */
+export function getRecommendedMediaConstraints(options: CameraOptions = {}): {
+  idealWidth: number;
+  idealHeight: number;
+  frameRate: number;
+} {
+  const isMobile = isMobileOrConstrainedDevice();
+  if (isMobile) {
+    return {
+      idealWidth: options.idealWidth ?? 640,
+      idealHeight: options.idealHeight ?? 480,
+      frameRate: 24,
+    };
+  }
+  return {
+    idealWidth: options.idealWidth ?? 1280,
+    idealHeight: options.idealHeight ?? 720,
+    frameRate: 30,
+  };
+}
+
+/**
+ * Safe feature detection for screen sharing capability (getDisplayMedia).
+ * Returns false on mobile platforms that lack getDisplayMedia support.
+ */
+export function isScreenShareSupported(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  return Boolean(
+    navigator.mediaDevices &&
+    typeof navigator.mediaDevices.getDisplayMedia === 'function'
+  );
+}
+
+/**
  * Requests camera with ideal constraints and fallback handling.
  */
 export async function requestCamera(
@@ -118,13 +195,14 @@ export async function requestCamera(
     };
   }
 
+  const recommended = getRecommendedMediaConstraints(options);
   const {
     audio = false,
     video = true,
     facingMode = 'user',
     deviceId,
-    idealWidth = 1280,
-    idealHeight = 720,
+    idealWidth = recommended.idealWidth,
+    idealHeight = recommended.idealHeight,
   } = options;
 
   // Build video constraints using ideal values (never exact) to prevent OverconstrainedError
@@ -132,6 +210,7 @@ export async function requestCamera(
     ? {
         width: { ideal: idealWidth },
         height: { ideal: idealHeight },
+        frameRate: { ideal: recommended.frameRate, max: 30 },
       }
     : false;
 

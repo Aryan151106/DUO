@@ -100,6 +100,23 @@ service cloud.firestore {
         allow read, write: if isCoupleMember(coupleId);
       }
 
+      // Starred messages collection (messageId_userId)
+      // Only the authenticated user can create, update, or delete their own starred items
+      match /starredMessages/{starId} {
+        allow read: if isCoupleMember(coupleId) &&
+          (resource == null || resource.data.userId == request.auth.uid);
+        allow create, update: if isCoupleMember(coupleId) &&
+          request.auth.uid == request.resource.data.userId &&
+          starId.matches('.*_' + request.auth.uid);
+        allow delete: if isCoupleMember(coupleId) &&
+          resource.data.userId == request.auth.uid;
+      }
+
+      // Shared Media index collection
+      match /sharedMedia/{mediaId} {
+        allow read, write: if isCoupleMember(coupleId);
+      }
+
       // Calendar Events
       match /events/{eventId} {
         allow read, write: if isCoupleMember(coupleId);
@@ -145,6 +162,20 @@ service cloud.firestore {
         allow read: if isCoupleMember(spaceId);
         allow create, update: if isCoupleMember(spaceId) && request.auth.uid == request.resource.data.userId;
         allow delete: if isCoupleMember(spaceId) && request.auth.uid == resource.data.userId;
+      }
+
+      match /starredMessages/{starId} {
+        allow read: if isCoupleMember(spaceId) &&
+          (resource == null || resource.data.userId == request.auth.uid);
+        allow create, update: if isCoupleMember(spaceId) &&
+          request.auth.uid == request.resource.data.userId &&
+          starId.matches('.*_' + request.auth.uid);
+        allow delete: if isCoupleMember(spaceId) &&
+          resource.data.userId == request.auth.uid;
+      }
+
+      match /sharedMedia/{mediaId} {
+        allow read, write: if isCoupleMember(spaceId);
       }
 
       match /{subcollection}/{document=**} {

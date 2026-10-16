@@ -133,6 +133,10 @@ export const CallRoom: React.FC<CallRoomProps> = ({ kind, title, subtitle, activ
       setScreenSharing(false);
       return;
     }
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+      setStatus('Screen sharing is not supported by this mobile browser.');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       screenStreamRef.current = stream;

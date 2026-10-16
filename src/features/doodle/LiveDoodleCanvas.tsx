@@ -59,7 +59,14 @@ function getSvgPathFromStroke(strokePoints: number[][]): string {
   return d.join(' ');
 }
 
+// Stroke geometry cache to prevent recalculating points on every pointer move
+const strokePathCache = new Map<string, string>();
+
 function getRenderedStrokePath(stroke: DoodleStroke): string {
+  const cacheKey = `${stroke.id}_${stroke.points.length}_${stroke.size}_${stroke.tool}`;
+  const cached = strokePathCache.get(cacheKey);
+  if (cached) return cached;
+
   const thinning =
     stroke.tool === 'calligraphy' ? 0.9 : stroke.tool === 'marker' || stroke.tool === 'highlighter' ? 0.1 : 0.5;
   const smoothing = stroke.tool === 'spray' ? 0.25 : 0.7;
@@ -77,7 +84,42 @@ function getRenderedStrokePath(stroke: DoodleStroke): string {
       streamline: 0.6,
     }
   );
-  return getSvgPathFromStroke(points);
+  const path = getSvgPathFromStroke(points);
+  if (stroke.id) {
+    strokePathCache.set(cacheKey, path);
+    if (strokePathCache.size > 2000) {
+      const firstKey = strokePathCache.keys().next().value;
+      if (firstKey) strokePathCache.delete(firstKey);
+    }
+  }
+  return path;
+}
+
+/**
+ * Combines all spray tool dots into ONE single compound SVG path instead of 1000s of <circle> DOM elements.
+ * Drastically cuts DOM footprint and eliminates mobile browser frame drops.
+ */
+function getSprayPath(stroke: DoodleStroke): string {
+  const cacheKey = `spray_${stroke.id}_${stroke.points.length}_${stroke.size}`;
+  const cached = strokePathCache.get(cacheKey);
+  if (cached) return cached;
+
+  const r = Math.max(0.8, stroke.size / 7);
+  const subpaths: string[] = [];
+  for (let index = 0; index < stroke.points.length; index++) {
+    const point = stroke.points[index];
+    for (let dotIndex = 0; dotIndex < 5; dotIndex++) {
+      const seed = (index + 1) * (dotIndex + 3);
+      const cx = point.x + (((seed * 17) % 23) - 11);
+      const cy = point.y + (((seed * 11) % 19) - 9);
+      subpaths.push(`M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 -${r * 2} 0`);
+    }
+  }
+  const pathD = subpaths.join(' ');
+  if (stroke.id) {
+    strokePathCache.set(cacheKey, pathD);
+  }
+  return pathD;
 }
 
 function renderStroke(
@@ -181,25 +223,7 @@ function renderStroke(
   }
 
   if (stroke.tool === 'spray') {
-    return (
-      <g opacity={opacity}>
-        {stroke.points.flatMap((point, index) =>
-          Array.from({ length: 5 }, (_, dotIndex) => {
-            const seed = (index + 1) * (dotIndex + 3);
-            const offset = ((seed * 17) % 23) - 11;
-            return (
-              <circle
-                key={`${stroke.id}-${index}-${dotIndex}`}
-                cx={point.x + offset}
-                cy={point.y + (((seed * 11) % 19) - 9)}
-                r={Math.max(0.8, stroke.size / 7)}
-                fill={fillColor}
-              />
-            );
-          })
-        )}
-      </g>
-    );
+    return <path d={getSprayPath(stroke)} fill={fillColor} opacity={opacity} />;
   }
 
   const path = <path d={getRenderedStrokePath(stroke)} fill={fillColor} opacity={opacity} />;
@@ -213,6 +237,24 @@ function renderStroke(
   }
   return path;
 }
+
+interface RenderedStrokeItemProps {
+  stroke: DoodleStroke;
+  paperStaysLight: boolean;
+  shapeKind: ShapeKind;
+  shapeFill: boolean;
+}
+
+const RenderedStrokeItem: React.FC<RenderedStrokeItemProps> = React.memo(
+  ({ stroke, paperStaysLight, shapeKind, shapeFill }) => {
+    return <g key={stroke.id}>{renderStroke(stroke, paperStaysLight, shapeKind, shapeFill)}</g>;
+  },
+  (prev, next) =>
+    prev.stroke === next.stroke &&
+    prev.paperStaysLight === next.paperStaysLight &&
+    prev.shapeKind === next.shapeKind &&
+    prev.shapeFill === next.shapeFill
+);
 
 export const LiveDoodleCanvas: React.FC = () => {
   const { currentUser, partnerUser, couple, setTab, isDemoMode } = useAuthStore();
@@ -350,11 +392,26 @@ export const LiveDoodleCanvas: React.FC = () => {
     };
 
     const bc = duoBroadcast;
-    bc.addEventListener('message', handleMessage);
-    return () => {
-      bc.removeEventListener('message', handleMessage);
-    };
+    if (bc) {
+      bc.addEventListener('message', handleMessage);
+      return () => {
+        bc.removeEventListener('message', handleMessage);
+      };
+    }
   }, [currentUser.id]);
+
+  // Clean up RAF on unmount
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
+  }, []);
+
+  const currentStrokeRef = useRef<DoodleStroke | null>(null);
+  const rafIdRef = useRef<number | null>(null);
 
   // Map pointer client coordinates into virtual canvas viewBox coordinates
   const getVirtualPoint = (clientX: number, clientY: number, pressure: number = 0.5): StrokePoint => {
@@ -386,7 +443,9 @@ export const LiveDoodleCanvas: React.FC = () => {
   // Pointer Down (1-finger draw, 2-finger pan & zoom)
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
 
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -405,10 +464,12 @@ export const LiveDoodleCanvas: React.FC = () => {
         shape: tool === 'shape' ? shapeKind : undefined,
       };
       (newStroke as any).isFilled = shapeFill;
+      currentStrokeRef.current = newStroke;
       setCurrentStroke(newStroke);
     }
     // 2-Finger Pinch / Pan Start
     else if (activePointersRef.current.size === 2) {
+      currentStrokeRef.current = null;
       setCurrentStroke(null); // Cancel single finger stroke if a second finger joins
       const pts = Array.from(activePointersRef.current.values());
       initialPinchDistRef.current = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -416,26 +477,33 @@ export const LiveDoodleCanvas: React.FC = () => {
     }
   };
 
-  // Pointer Move
+  // Pointer Move with requestAnimationFrame throttling
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     e.preventDefault();
     if (!activePointersRef.current.has(e.pointerId)) return;
     activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     // 1-Finger Drawing
-    if (activePointersRef.current.size === 1 && currentStroke) {
+    if (activePointersRef.current.size === 1 && currentStrokeRef.current) {
       const pt = getVirtualPoint(e.clientX, e.clientY, e.pressure);
-      const updated: DoodleStroke = {
-        ...currentStroke,
-        points: [...currentStroke.points, pt],
-      };
-      setCurrentStroke(updated);
+      const stroke = currentStrokeRef.current;
+      stroke.points.push(pt);
+
+      // Throttle React state updates to screen refresh rate (typically 60-120fps)
+      if (rafIdRef.current === null) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (currentStrokeRef.current) {
+            setCurrentStroke({ ...currentStrokeRef.current, points: [...currentStrokeRef.current.points] });
+          }
+        });
+      }
 
       // Throttled partner broadcast (60ms)
       const now = Date.now();
       if (now - lastBroadcastTime.current > 60) {
         lastBroadcastTime.current = now;
-        broadcastEvent('DOODLE_STROKE', updated, currentUser.id, couple?.id || '');
+        broadcastEvent('DOODLE_STROKE', stroke, currentUser.id, couple?.id || '');
       }
     }
     // 2-Finger Pinch & Pan
@@ -464,21 +532,34 @@ export const LiveDoodleCanvas: React.FC = () => {
     }
   };
 
-  // Pointer Up
+  // Pointer Up & Commit
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     e.preventDefault();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
     activePointersRef.current.delete(e.pointerId);
 
     if (activePointersRef.current.size === 0) {
       initialPinchDistRef.current = null;
       initialViewBoxRef.current = null;
-      if (currentStroke) {
-        setStrokes((prev) => [...prev, currentStroke]);
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      const finishedStroke = currentStrokeRef.current;
+      if (finishedStroke && finishedStroke.points.length > 0) {
+        setStrokes((prev) => [...prev, finishedStroke]);
         setRedoStack([]);
-        broadcastEvent('DOODLE_STROKE', currentStroke, currentUser.id, couple?.id || '');
+        broadcastEvent('DOODLE_STROKE', finishedStroke, currentUser.id, couple?.id || '');
+        currentStrokeRef.current = null;
         setCurrentStroke(null);
       }
     }
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<SVGSVGElement>) => {
+    handlePointerUp(e);
   };
 
   // Mouse wheel zoom
@@ -674,6 +755,8 @@ export const LiveDoodleCanvas: React.FC = () => {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+          onPointerLeave={handlePointerCancel}
           onWheel={handleWheel}
           className="w-full h-full touch-none select-none"
           style={{
@@ -700,11 +783,15 @@ export const LiveDoodleCanvas: React.FC = () => {
             </filter>
           </defs>
 
-          {/* Committed strokes */}
+          {/* Committed strokes — memoized so in-progress pointer movements never re-render them */}
           {strokes.map((stroke) => (
-            <React.Fragment key={stroke.id}>
-              {renderStroke(stroke, paperStaysLight, shapeKind, (stroke as any).isFilled)}
-            </React.Fragment>
+            <RenderedStrokeItem
+              key={stroke.id}
+              stroke={stroke}
+              paperStaysLight={paperStaysLight}
+              shapeKind={shapeKind}
+              shapeFill={(stroke as any).isFilled ?? false}
+            />
           ))}
 
           {/* Current active stroke */}

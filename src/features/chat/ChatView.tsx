@@ -37,10 +37,14 @@ import {
   Share2,
   Loader2,
   Heart,
+  Star,
 } from 'lucide-react';
 import { AttachmentPreview } from './AttachmentPreview';
 import { VoiceMessage } from './VoiceMessage';
 import { ChatInputComposer } from './ChatInputComposer';
+import { StarredMessagesModal } from './StarredMessagesModal';
+import { useStarredMessages } from '../../lib/starredMessages';
+import { indexSharedMediaItem, removeSharedMediaItem } from '../../lib/sharedMedia';
 import { voiceRecorder, uploadVoiceNote } from '../../lib/voice';
 import { saveMediaToDevice, generateCleanMediaFileName } from '../../lib/saveMedia';
 import { deleteAttachmentFile, type FileAttachment } from '../../lib/attachments';
@@ -79,6 +83,37 @@ export const ChatView: React.FC = () => {
   const [contextMenuMsgId, setContextMenuMsgId] = useState<string | null>(null);
   const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
   const [showChatSettings, setShowChatSettings] = useState(false);
+  const [showStarredModal, setShowStarredModal] = useState(false);
+  const {
+    starredList,
+    isStarred,
+    toggle,
+    unstar,
+  } = useStarredMessages(isDemo ? null : couple?.id || null, currentUser.id);
+
+  const handleToggleStar = async (msg: ChatMessage) => {
+    soundEffects.playPop();
+    setContextMenuMsgId(null);
+    try {
+      await toggle(msg, partnerUser.displayName);
+    } catch (err) {
+      console.error('Failed to toggle star:', err);
+    }
+  };
+
+  const handleJumpToMessage = (messageId: string) => {
+    setShowStarredModal(false);
+    setTimeout(() => {
+      const el = document.getElementById(`message-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('chat-reply-highlight');
+        setTimeout(() => el.classList.remove('chat-reply-highlight'), 1800);
+      } else {
+        alert('This message is further up in history. Scroll up and tap "Load earlier messages" to view it.');
+      }
+    }, 120);
+  };
   const [nickname, setNickname] = useState(() =>
     partnerUser.nickname ||
     (typeof window !== 'undefined' ? localStorage.getItem('duo_nickname_partner') || '' : '')
@@ -626,6 +661,26 @@ export const ChatView: React.FC = () => {
           body: caption || `Shared ${attachments.length} attachment(s)`,
           deepLink: '/?action=chat',
         });
+
+        // Index attachments into Shared Media Vault
+        for (const att of attachments) {
+          void indexSharedMediaItem(couple.id, {
+            id: att.id,
+            category: att.type === 'video' ? 'videos' : 'photos',
+            name: att.fileName,
+            url: att.url,
+            thumbnailUrl: att.thumbnailUrl || att.url,
+            path: att.path,
+            thumbnailPath: att.thumbnailPath,
+            createdAt: att.createdAt || new Date().toISOString(),
+            timestamp: Date.now(),
+            source: 'chat',
+            sourceId: tempId,
+            senderId: currentUser.id,
+            size: att.size,
+            caption: caption || '',
+          });
+        }
       } catch (err) {
         setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
         console.error('Firestore attachment message send failed:', err);
@@ -728,15 +783,23 @@ export const ChatView: React.FC = () => {
       if (!isDemo && couple?.id) {
         setOptimisticMessages((prev) => [...prev, newVoiceMsg]);
         setTimeout(() => scrollToBottom('smooth'), 10);
-        await sendMessage(couple.id, {
-          clientId: messageId,
-          senderId: currentUser.id,
-          content: downloadUrl,
-          messageType: 'voice',
-          mediaUrl: downloadUrl,
-          metadata: newVoiceMsg.metadata,
-          status: 'sent',
-        });
+        try {
+          await sendMessage(couple.id, {
+            clientId: messageId,
+            senderId: currentUser.id,
+            content: downloadUrl,
+            messageType: 'voice',
+            mediaUrl: downloadUrl,
+            metadata: newVoiceMsg.metadata,
+            status: 'sent',
+          });
+        } catch (sendErr) {
+          if (storagePath) {
+            deleteAttachmentFile(storagePath).catch(() => {});
+          }
+          setOptimisticMessages((prev) => prev.filter((m) => m.id !== messageId));
+          throw sendErr;
+        }
 
         // Trigger real-time pop-up notification for partner
         useNotificationStore.getState().sendNotification({
@@ -895,7 +958,13 @@ export const ChatView: React.FC = () => {
     }
     const x = dx <= 0 ? 0 : Math.min(80, dx * 0.62);
     const armed = x >= 45;
-    if (armed && !swipeState?.armed && navigator.vibrate) navigator.vibrate(10);
+    if (armed && !swipeState?.armed) {
+      try {
+        if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+          navigator.vibrate(10);
+        }
+      } catch {}
+    }
     setSwipeState({ id: start.id, x, armed });
   };
 
@@ -955,11 +1024,14 @@ export const ChatView: React.FC = () => {
     soundEffects.playPop();
     setContextMenuMsgId(null);
 
-    // Delete associated files from storage
+    // Delete associated files from storage and remove from sharedMedia index
     if (msg.attachments && msg.attachments.length > 0) {
       for (const att of msg.attachments) {
         if (att.path) {
           deleteAttachmentFile(att.path).catch(console.warn);
+        }
+        if (couple?.id) {
+          void removeSharedMediaItem(couple.id, att.id);
         }
       }
     }
@@ -1143,6 +1215,20 @@ export const ChatView: React.FC = () => {
 
         {/* Quick Call Action Buttons (44px tap targets) */}
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowStarredModal(true)}
+            title="Starred messages"
+            aria-label="View starred messages"
+            className="relative w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
+          >
+            <Star className={`w-4 h-4 ${starredList.length > 0 ? 'text-amber-500 fill-amber-400' : 'text-[var(--text)]'}`} />
+            {starredList.length > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white font-ui text-[10px] font-bold flex items-center justify-center shadow-xs">
+                {starredList.length > 99 ? '99+' : starredList.length}
+              </span>
+            )}
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -1371,6 +1457,11 @@ export const ChatView: React.FC = () => {
                   {/* Inline Bottom-Right Timestamp & Status Tick */}
                   {!isDeletedEveryone && (
                     <div className="flex items-center justify-end gap-1.5 mt-1 text-[11px] font-ui select-none">
+                      {isStarred(msg.id) && (
+                        <span title="Starred message" className="inline-flex items-center text-amber-400 mr-0.5">
+                          <Star className="w-3 h-3 fill-amber-400" />
+                        </span>
+                      )}
                       <span className={isMe ? 'text-white/80' : 'text-[var(--text-muted)]'}>
                         {formatTimeOnly(msg.created_at, currentUser.timezone, { showSeconds: false })}
                       </span>
@@ -1471,6 +1562,17 @@ export const ChatView: React.FC = () => {
                       >
                         <Copy className="w-3.5 h-3.5" />
                         <span>Copy</span>
+                      </button>
+                    )}
+
+                    {!isDeletedEveryone && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStar(msg)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:bg-[var(--surface-2)] cursor-pointer text-left"
+                      >
+                        <Star className={`w-3.5 h-3.5 ${isStarred(msg.id) ? 'fill-amber-400 text-amber-500' : 'text-amber-500'}`} />
+                        <span>{isStarred(msg.id) ? 'Unstar message' : 'Star message'}</span>
                       </button>
                     )}
 
@@ -1682,6 +1784,16 @@ export const ChatView: React.FC = () => {
         onStartRecording={handleStartRecording}
         onStopRecording={handleStopRecording}
         externalInputRef={inputRef}
+      />
+
+      {/* WhatsApp-Style Starred Messages View Modal */}
+      <StarredMessagesModal
+        isOpen={showStarredModal}
+        onClose={() => setShowStarredModal(false)}
+        starredList={starredList}
+        onUnstar={unstar}
+        onJumpToMessage={handleJumpToMessage}
+        currentUserId={currentUser.id}
       />
     </div>
   );

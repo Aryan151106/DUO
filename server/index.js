@@ -39,24 +39,25 @@ async function generateLiveKitToken({ roomName, identity, displayName, isHost = 
   return { token, serverUrl: LIVEKIT_URL };
 }
 
-// 1. Initialize Firebase Admin SDK if service account is provided
+// 1. Initialize Firebase Admin SDK
 let db = null;
-if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-  try {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    if (!admin.apps.length) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-        projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || 'duo-couples-app-8910',
-      });
+if (!admin.apps.length) {
+  const adminOptions = {
+    projectId: process.env.FIREBASE_PROJECT_ID || 'av-space-311906',
+  };
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+      adminOptions.credential = admin.credential.cert(serviceAccount);
+      adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || 'av-space-311906';
+    } catch (e) {
+      console.warn('[FirebaseAdmin] Failed to parse service account JSON:', e.message);
     }
-    db = admin.firestore();
-    console.log('[FirebaseAdmin] Initialized with provided service account key.');
-  } catch (e) {
-    console.warn('[FirebaseAdmin] Failed to parse service account JSON:', e.message);
   }
-} else {
-  console.log('[FirebaseAdmin] Running in standalone LiveKit + Socket mode (no GCP service account needed).');
+  admin.initializeApp(adminOptions);
+  if (adminOptions.credential) {
+    db = admin.firestore();
+  }
 }
 const app = express();
 const server = http.createServer(app);
@@ -110,39 +111,32 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Helper to extract authenticated user claims from Firebase ID token without GCP metadata dependencies
-function getAuthenticatedUser(req) {
+// Cryptographically verify Firebase ID token and extract authenticated user claims
+async function getAuthenticatedUser(req) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new Error('Missing or malformed Authorization header');
   }
   const idToken = authHeader.split('Bearer ')[1].trim();
+  if (!idToken) {
+    throw new Error('Missing authentication token');
+  }
 
-  let uid = '';
-  let tokenName = '';
+  let decodedToken;
   try {
-    const parts = idToken.split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      if (payload.exp && Date.now() / 1000 > payload.exp) {
-        throw new Error('Authentication token has expired. Please refresh the page.');
-      }
-      uid = payload.user_id || payload.sub || '';
-      tokenName = payload.name || payload.email || '';
-    }
-  } catch (err) {
-    if (err.message.includes('expired')) throw err;
-    console.warn('[Auth] Error decoding token payload:', err.message);
+    decodedToken = await admin.auth().verifyIdToken(idToken);
+  } catch (verifyErr) {
+    console.warn('[Auth] ID token verification rejected:', verifyErr.message);
+    throw new Error(`Authentication token verification failed: ${verifyErr.message}`);
   }
 
-  if (!uid) {
-    throw new Error('Invalid authentication token');
-  }
-
+  const uid = decodedToken.uid;
+  const tokenName = decodedToken.name || decodedToken.email || 'Partner';
   const body = req.body || {};
+
   return {
     uid,
-    displayName: body.displayName || tokenName || 'Partner',
+    displayName: body.displayName || tokenName,
     coupleId: body.coupleId || null,
   };
 }
@@ -150,7 +144,7 @@ function getAuthenticatedUser(req) {
 // REST Endpoint: Create Authoritative Together Room (Study or Movie)
 app.post('/api/livekit/create-room', async (req, res) => {
   try {
-    const user = getAuthenticatedUser(req);
+    const user = await getAuthenticatedUser(req);
     const { type, initialTitle, roomId: requestedRoomId, roomName: requestedRoomName, coupleId: reqCoupleId } = req.body || {};
     if (!type || (type !== 'study' && type !== 'movie')) {
       return res.status(400).json({ error: "Invalid type. Must be 'study' or 'movie'." });
@@ -213,7 +207,7 @@ app.post('/api/livekit/create-room', async (req, res) => {
     });
   } catch (err) {
     console.error('[LiveKit Server] create-room error:', err.message);
-    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid')) ? 401 : 500;
+    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500;
     return res.status(status).json({ error: err.message });
   }
 });
@@ -221,7 +215,7 @@ app.post('/api/livekit/create-room', async (req, res) => {
 // REST Endpoint: Join Authoritative Together Room
 app.post('/api/livekit/join-room', async (req, res) => {
   try {
-    const user = getAuthenticatedUser(req);
+    const user = await getAuthenticatedUser(req);
     const { roomId, roomName: reqRoomName, coupleId: reqCoupleId, type: reqType } = req.body || {};
     if (!roomId) {
       return res.status(400).json({ error: 'Missing roomId.' });
@@ -273,7 +267,7 @@ app.post('/api/livekit/join-room', async (req, res) => {
     });
   } catch (err) {
     console.error('[LiveKit Server] join-room error:', err.message);
-    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid')) ? 401 : 500;
+    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500;
     return res.status(status).json({ error: err.message });
   }
 });
@@ -281,7 +275,7 @@ app.post('/api/livekit/join-room', async (req, res) => {
 // REST Endpoint: End Authoritative Together Room
 app.post('/api/livekit/end-room', async (req, res) => {
   try {
-    const user = getAuthenticatedUser(req);
+    const user = await getAuthenticatedUser(req);
     const { roomId } = req.body || {};
     if (!roomId) {
       return res.status(400).json({ error: 'Missing roomId.' });
@@ -312,8 +306,8 @@ app.post('/api/livekit/end-room', async (req, res) => {
 // REST Endpoint: Issue Scoped LiveKit Access Token
 app.post('/api/livekit/token', async (req, res) => {
   try {
-    const user = getAuthenticatedUser(req);
-    const { roomId, coupleId: reqCoupleId, roomName: reqRoomName, isHost = false } = req.body || {};
+    const user = await getAuthenticatedUser(req);
+    const { roomId, coupleId: reqCoupleId, roomName: reqRoomName } = req.body || {};
     const targetRoomId = roomId;
     const targetCoupleId = reqCoupleId || user.coupleId || 'couple-duo';
 
@@ -323,7 +317,7 @@ app.post('/api/livekit/token', async (req, res) => {
 
     let type = targetRoomId.includes('movie') ? 'movie' : 'study';
     let roomName = reqRoomName || `duo-${targetCoupleId}-${type}`.toLowerCase();
-    let hostFlag = isHost;
+    let hostFlag = false; // Strictly default to false; NEVER trust client isHost
 
     if (db) {
       try {
@@ -333,6 +327,7 @@ app.post('/api/livekit/token', async (req, res) => {
           if (roomData.status === 'ended') {
             return res.status(410).json({ error: 'Room has ended.' });
           }
+          // Strictly derive host privileges from trusted room data
           hostFlag = roomData.hostUid === user.uid;
           roomName = roomData.roomName || roomName;
         }

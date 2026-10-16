@@ -4,7 +4,7 @@
  */
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { app } from './firebase';
-import { isCloudStorageAvailable, blobToDataUrl, setCloudStorageEnabled } from './storageService';
+import { isCloudStorageAvailable } from './storageService';
 
 export type AttachmentType = 'image' | 'video' | 'document';
 
@@ -12,6 +12,7 @@ export interface FileAttachment {
   id: string;
   type: AttachmentType;
   path: string;
+  thumbnailPath?: string;
   url: string;
   thumbnailUrl?: string;
   fileName: string;
@@ -155,9 +156,60 @@ export async function compressImage(
 }
 
 /**
- * Capture thumbnail from video file (first frame around 0.5s).
+ * Generate lightweight image thumbnail blob (max 320px, ~15KB JPEG).
  */
-export async function generateVideoThumbnail(file: File): Promise<string> {
+export async function createImageThumbnail(
+  file: File,
+  maxDimension: number = 320,
+  quality: number = 0.6
+): Promise<Blob> {
+  return new Promise((resolve) => {
+    if (file.type === 'image/svg+xml') {
+      resolve(file);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => resolve(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => resolve(file);
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(
+          (blob) => resolve(blob || file),
+          'image/jpeg',
+          quality
+        );
+      };
+      img.src = e.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Capture lightweight thumbnail blob from video file (first frame around 0.5s).
+ */
+export async function generateVideoThumbnailBlob(file: File): Promise<Blob | null> {
   return new Promise((resolve) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
@@ -179,34 +231,46 @@ export async function generateVideoThumbnail(file: File): Promise<string> {
     video.onseeked = () => {
       try {
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 320;
-        canvas.height = video.videoHeight || 240;
+        const width = Math.min(480, video.videoWidth || 320);
+        const height = Math.round(width * ((video.videoHeight || 240) / (video.videoWidth || 320)));
+        canvas.width = Math.max(1, width);
+        canvas.height = Math.max(1, height);
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          cleanup();
-          resolve(dataUrl);
+          canvas.toBlob(
+            (blob) => {
+              cleanup();
+              resolve(blob);
+            },
+            'image/jpeg',
+            0.65
+          );
           return;
         }
-      } catch (err) {
+      } catch {
         // Ignored
       }
       cleanup();
-      resolve('');
+      resolve(null);
     };
 
     video.onerror = () => {
       cleanup();
-      resolve('');
+      resolve(null);
     };
 
-    // Timeout safety
     setTimeout(() => {
       cleanup();
-      resolve('');
+      resolve(null);
     }, 4000);
   });
+}
+
+export async function generateVideoThumbnail(file: File): Promise<string> {
+  const blob = await generateVideoThumbnailBlob(file);
+  if (!blob) return '';
+  return URL.createObjectURL(blob);
 }
 
 /**
@@ -238,40 +302,30 @@ export async function uploadAttachment(
   const sanitized = sanitizeFileName(file.name);
   const fileId = `att-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
   const storagePath = `spaces/${spaceId}/${folder}/${parentId}/${fileId}-${sanitized}`;
+  const thumbnailPath = `spaces/${spaceId}/${folder}/${parentId}/${fileId}-thumb.jpg`;
 
   let processedBlob: Blob = file;
-  let thumbnailUrl: string | undefined;
+  let thumbBlob: Blob | null = null;
 
-  if (type === 'image' && !options?.originalQuality && file.size > 300 * 1024) {
-    try {
-      processedBlob = await compressImage(file, 0.8, 1600);
-    } catch {
-      processedBlob = file;
+  if (type === 'image') {
+    if (!options?.originalQuality && file.size > 300 * 1024) {
+      try {
+        processedBlob = await compressImage(file, 0.8, 1600);
+      } catch {
+        processedBlob = file;
+      }
     }
+    try {
+      thumbBlob = await createImageThumbnail(file, 320, 0.6);
+    } catch {}
   } else if (type === 'video') {
     try {
-      thumbnailUrl = await generateVideoThumbnail(file);
-    } catch {
-      // Ignored
-    }
+      thumbBlob = await generateVideoThumbnailBlob(file);
+    } catch {}
   }
 
   if (!isCloudStorageAvailable()) {
-    options?.onProgress?.(50);
-    const dataUrl = await blobToDataUrl(processedBlob);
-    options?.onProgress?.(100);
-    return {
-      id: fileId,
-      type,
-      path: storagePath,
-      url: dataUrl,
-      thumbnailUrl: thumbnailUrl || (type === 'image' ? dataUrl : undefined),
-      fileName: sanitized,
-      mimeType: file.type || 'application/octet-stream',
-      size: processedBlob.size,
-      uploadedBy,
-      createdAt: new Date().toISOString(),
-    };
+    throw new Error('Cloud Storage is unavailable. Please check your connection and retry.');
   }
 
   // Attempt Firebase Storage upload
@@ -283,7 +337,7 @@ export async function uploadAttachment(
       cacheControl: 'public,max-age=31536000,immutable',
     });
 
-    return await new Promise<FileAttachment>((resolve, reject) => {
+    const fileAttachment = await new Promise<FileAttachment>((resolve, reject) => {
       // 60-second safety timeout for slow mobile uploads
       const timer = setTimeout(() => {
         try { uploadTask.cancel(); } catch {}
@@ -312,7 +366,6 @@ export async function uploadAttachment(
               type,
               path: storagePath,
               url: downloadUrl,
-              thumbnailUrl,
               fileName: sanitized,
               mimeType: file.type || 'application/octet-stream',
               size: processedBlob.size,
@@ -326,21 +379,27 @@ export async function uploadAttachment(
         }
       );
     });
-  } catch (err) {
-    setCloudStorageEnabled(false);
-    const dataUrl = await blobToDataUrl(processedBlob);
-    return {
-      id: fileId,
-      type,
-      path: storagePath,
-      url: dataUrl,
-      thumbnailUrl: thumbnailUrl || (type === 'image' ? dataUrl : undefined),
-      fileName: sanitized,
-      mimeType: file.type || 'application/octet-stream',
-      size: processedBlob.size,
-      uploadedBy,
-      createdAt: new Date().toISOString(),
-    };
+
+    // Upload thumbnail blob if generated
+    if (thumbBlob) {
+      try {
+        const thumbRef = ref(storage, thumbnailPath);
+        await uploadBytesResumable(thumbRef, thumbBlob, {
+          contentType: 'image/jpeg',
+          cacheControl: 'public,max-age=31536000,immutable',
+        });
+        const thumbDownloadUrl = await getDownloadURL(thumbRef);
+        fileAttachment.thumbnailUrl = thumbDownloadUrl;
+        fileAttachment.thumbnailPath = thumbnailPath;
+      } catch (thumbErr) {
+        console.warn('[Attachments] Thumbnail upload warning:', thumbErr);
+      }
+    }
+
+    return fileAttachment;
+  } catch (err: any) {
+    console.error('[Attachments] Storage upload failed:', err);
+    throw (err instanceof Error ? err : new Error(String(err) || 'Attachment upload failed'));
   }
 }
 

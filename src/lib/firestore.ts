@@ -4,7 +4,7 @@
  * Each hook returns live data via Firestore onSnapshot listeners,
  * which automatically sync across devices with offline persistence.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   collection,
   doc,
@@ -20,9 +20,11 @@ import {
   writeBatch,
   serverTimestamp,
   limit,
+  startAfter,
   enableNetwork,
   disableNetwork,
   type DocumentData,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { usePresenceStore } from './store';
@@ -33,6 +35,7 @@ import type { PeriodTracker, DiaryEntry } from './dataStore';
 import {
   normalizeMessageTimestamp,
   groupMessagesByDay,
+  mergeAndDeduplicateMessages,
 } from './chatHistory';
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -405,10 +408,30 @@ export function getMessageTimestamp(m: any): number {
 }
 
 /**
- * Live-subscribe to messages for a couple.
+ * Helper to map a Firestore document snapshot to a unified ChatMessage object.
+ */
+export function mapDocToChatMessage(d: any): ChatMessage {
+  const raw = d.data({ serverTimestamps: 'estimate' });
+  return {
+    id: d.id,
+    ...raw,
+    // Ensure dual-property mapping so all components get both conventions
+    senderId: raw.senderId || raw.sender_id,
+    sender_id: raw.sender_id || raw.senderId,
+    messageType: raw.messageType || raw.message_type || 'text',
+    message_type: raw.message_type || raw.messageType || 'text',
+    mediaUrl: raw.mediaUrl || raw.media_url,
+    media_url: raw.media_url || raw.mediaUrl,
+    replyTo: raw.replyTo || raw.reply_to,
+    reply_to: raw.reply_to || raw.replyTo,
+  } as unknown as ChatMessage;
+}
+
+/**
+ * Live-subscribe to messages for a couple with a bounded query limit.
  * Queries newest messages first (limitCount) and falls back gracefully if un-migrated.
  */
-export function useMessages(coupleId: string | null, _limitCount?: number) {
+export function useMessages(coupleId: string | null, limitCount?: number) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -420,24 +443,10 @@ export function useMessages(coupleId: string | null, _limitCount?: number) {
     }
 
     const messagesCol = collection(db, 'couples', coupleId, 'messages');
+    const boundedLimit = typeof limitCount === 'number' && limitCount > 0 ? limitCount : 100;
 
     const handleSnapshot = (snapshot: any) => {
-      const items: ChatMessage[] = snapshot.docs.map((d: any) => {
-        const raw = d.data({ serverTimestamps: 'estimate' });
-        return {
-          id: d.id,
-          ...raw,
-          // Ensure dual-property mapping so all components get both conventions
-          senderId: raw.senderId || raw.sender_id,
-          sender_id: raw.sender_id || raw.senderId,
-          messageType: raw.messageType || raw.message_type || 'text',
-          message_type: raw.message_type || raw.messageType || 'text',
-          mediaUrl: raw.mediaUrl || raw.media_url,
-          media_url: raw.media_url || raw.mediaUrl,
-          replyTo: raw.replyTo || raw.reply_to,
-          reply_to: raw.reply_to || raw.replyTo,
-        };
-      }) as unknown as ChatMessage[];
+      const items: ChatMessage[] = snapshot.docs.map(mapDocToChatMessage);
 
       // Sort chronologically (oldest to newest) with deterministic tie-breaker
       items.sort((a: any, b: any) => {
@@ -451,21 +460,36 @@ export function useMessages(coupleId: string | null, _limitCount?: number) {
       setLoading(false);
     };
 
-    // Subscribe directly to messages collection to reliably receive all messages
-    // (legacy messages and messages from mobile devices without clientTimestamp)
-    const unsubscribe = onSnapshot(
-      messagesCol,
-      handleSnapshot,
-      (error) => {
-        console.error('[Firestore] useMessages error:', error);
-        setLoading(false);
-      }
-    );
+    // Bounded query for recent messages only (never reads entire historical collection)
+    const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(boundedLimit));
+
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onSnapshot(
+        q,
+        handleSnapshot,
+        (error) => {
+          console.warn('[Firestore] useMessages orderBy createdAt error, trying fallback:', error);
+          const fallbackQ = query(messagesCol, limit(boundedLimit));
+          unsubscribe = onSnapshot(
+            fallbackQ,
+            handleSnapshot,
+            (fallbackErr) => {
+              console.error('[Firestore] useMessages fallback error:', fallbackErr);
+              setLoading(false);
+            }
+          );
+        }
+      );
+    } catch (err) {
+      console.error('[Firestore] useMessages subscribe error:', err);
+      setLoading(false);
+    }
 
     return () => {
       unsubscribe();
     };
-  }, [coupleId]);
+  }, [coupleId, limitCount]);
 
   return { messages, loading };
 }
@@ -483,91 +507,107 @@ export interface UsePaginatedMessagesResult {
 
 /**
  * Progressive day-by-day chat message hook.
- * Initially loads only the newest day's messages (bounded to 100).
- * Supports top-scroll day-by-day pagination, within-day pagination if >100 messages,
- * and maintains real-time updates for live incoming messages.
+ * Initially loads only the newest day's messages with a bounded live listener (limit 50).
+ * Supports top-scroll day-by-day pagination with Firestore cursor (`startAfter`),
+ * within-day pagination if >100 messages, and maintains real-time updates for live incoming messages.
  */
 export function usePaginatedMessages(
   coupleId: string | null,
   timeZone?: string
 ): UsePaginatedMessagesResult {
-  const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
+  const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
+  const [fetchedHistory, setFetchedHistory] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [hasMoreInFirestore, setHasMoreInFirestore] = useState(true);
   const [unlockedDaysCount, setUnlockedDaysCount] = useState(1);
   const [earliestDayLimit, setEarliestDayLimit] = useState(100);
 
+  const oldestDocCursorRef = useRef<QueryDocumentSnapshot | null>(null);
+  const isFetchingPageRef = useRef(false);
+
   // Reset pagination state when coupleId changes
   useEffect(() => {
+    setLiveMessages([]);
+    setFetchedHistory([]);
     setUnlockedDaysCount(1);
     setEarliestDayLimit(100);
+    setHasMoreInFirestore(true);
+    oldestDocCursorRef.current = null;
+    isFetchingPageRef.current = false;
   }, [coupleId]);
 
   useEffect(() => {
     if (!coupleId || coupleId.startsWith('demo') || coupleId === 'couple-duo-main') {
-      setAllMessages([]);
+      setLiveMessages([]);
       setLoading(false);
       return;
     }
 
     const messagesCol = collection(db, 'couples', coupleId, 'messages');
+    // Bounded live listener: listens to newest 50 messages only (never scans full collection)
+    const liveQuery = query(messagesCol, orderBy('createdAt', 'desc'), limit(50));
 
     const handleSnapshot = (snapshot: any) => {
-      const items: ChatMessage[] = snapshot.docs.map((d: any) => {
-        const raw = d.data({ serverTimestamps: 'estimate' });
-        return {
-          id: d.id,
-          ...raw,
-          senderId: raw.senderId || raw.sender_id,
-          sender_id: raw.sender_id || raw.senderId,
-          messageType: raw.messageType || raw.message_type || 'text',
-          message_type: raw.message_type || raw.messageType || 'text',
-          mediaUrl: raw.mediaUrl || raw.media_url,
-          media_url: raw.media_url || raw.mediaUrl,
-          replyTo: raw.replyTo || raw.reply_to,
-          reply_to: raw.reply_to || raw.replyTo,
-        };
-      }) as unknown as ChatMessage[];
-
-      items.sort((a: any, b: any) => {
-        const tA = normalizeMessageTimestamp(a);
-        const tB = normalizeMessageTimestamp(b);
-        if (tA !== tB) return tA - tB;
-        return (a.id || '').localeCompare(b.id || '');
-      });
-
-      setAllMessages(items);
+      const items: ChatMessage[] = snapshot.docs.map(mapDocToChatMessage);
+      if (snapshot.docs.length > 0) {
+        if (!oldestDocCursorRef.current) {
+          oldestDocCursorRef.current = snapshot.docs[snapshot.docs.length - 1];
+        }
+      }
+      if (snapshot.docs.length < 50) {
+        setHasMoreInFirestore(false);
+      }
+      setLiveMessages(items);
       setLoading(false);
     };
 
-    const unsubscribe = onSnapshot(
-      messagesCol,
-      handleSnapshot,
-      (error) => {
-        console.error('[Firestore] usePaginatedMessages error:', error);
-        setLoading(false);
-      }
-    );
+    let unsubscribe = () => {};
+    try {
+      unsubscribe = onSnapshot(
+        liveQuery,
+        handleSnapshot,
+        (error) => {
+          console.warn('[Firestore] usePaginatedMessages liveQuery error, trying fallback:', error);
+          const fallbackQuery = query(messagesCol, limit(50));
+          unsubscribe = onSnapshot(
+            fallbackQuery,
+            handleSnapshot,
+            (fallbackErr) => {
+              console.error('[Firestore] usePaginatedMessages fallback error:', fallbackErr);
+              setLoading(false);
+            }
+          );
+        }
+      );
+    } catch (err) {
+      console.error('[Firestore] usePaginatedMessages listener error:', err);
+      setLoading(false);
+    }
 
     return () => {
       unsubscribe();
     };
   }, [coupleId]);
 
+  const allLoadedMessages = useMemo(() => {
+    return mergeAndDeduplicateMessages(fetchedHistory, liveMessages);
+  }, [fetchedHistory, liveMessages]);
+
   const dayGroups = useMemo(() => {
-    return groupMessagesByDay(allMessages, timeZone);
-  }, [allMessages, timeZone]);
+    return groupMessagesByDay(allLoadedMessages, timeZone);
+  }, [allLoadedMessages, timeZone]);
 
   const { visibleMessages, hasMoreEarlier } = useMemo(() => {
     if (dayGroups.length === 0) {
-      return { visibleMessages: [], hasMoreEarlier: false };
+      return { visibleMessages: [], hasMoreEarlier: hasMoreInFirestore };
     }
 
     const startIndex = Math.max(0, dayGroups.length - unlockedDaysCount);
     const visibleGroups = dayGroups.slice(startIndex);
 
     const earliestGroup = visibleGroups[0];
-    const earliestDayMessages = earliestGroup.messages;
+    const earliestDayMessages = earliestGroup?.messages || [];
     const hasMoreInEarliestDay = earliestDayMessages.length > earliestDayLimit;
 
     const result: ChatMessage[] = [];
@@ -580,10 +620,44 @@ export function usePaginatedMessages(
     });
 
     const hasEarlierDays = startIndex > 0;
-    const hasMore = hasEarlierDays || hasMoreInEarliestDay;
+    const hasMore = hasEarlierDays || hasMoreInEarliestDay || hasMoreInFirestore;
 
     return { visibleMessages: result, hasMoreEarlier: hasMore };
-  }, [dayGroups, unlockedDaysCount, earliestDayLimit]);
+  }, [dayGroups, unlockedDaysCount, earliestDayLimit, hasMoreInFirestore]);
+
+  // Fetch next bounded page from Firestore cursor
+  const fetchOlderPage = useCallback(async (): Promise<boolean> => {
+    if (!coupleId || !hasMoreInFirestore || isFetchingPageRef.current) return false;
+    isFetchingPageRef.current = true;
+    try {
+      const messagesCol = collection(db, 'couples', coupleId, 'messages');
+      const q = oldestDocCursorRef.current
+        ? query(messagesCol, orderBy('createdAt', 'desc'), startAfter(oldestDocCursorRef.current), limit(100))
+        : query(messagesCol, orderBy('createdAt', 'desc'), limit(100));
+
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setHasMoreInFirestore(false);
+        return false;
+      }
+
+      const items: ChatMessage[] = snap.docs.map(mapDocToChatMessage);
+      oldestDocCursorRef.current = snap.docs[snap.docs.length - 1];
+
+      if (snap.docs.length < 100) {
+        setHasMoreInFirestore(false);
+      }
+
+      setFetchedHistory((prev) => mergeAndDeduplicateMessages(items, prev));
+      return true;
+    } catch (err) {
+      console.warn('[Firestore] fetchOlderPage error:', err);
+      setHasMoreInFirestore(false);
+      return false;
+    } finally {
+      isFetchingPageRef.current = false;
+    }
+  }, [coupleId, hasMoreInFirestore]);
 
   const loadEarlier = useCallback(async () => {
     if (isLoadingEarlier || !hasMoreEarlier) return;
@@ -592,60 +666,114 @@ export function usePaginatedMessages(
     try {
       const startIndex = Math.max(0, dayGroups.length - unlockedDaysCount);
       const earliestGroup = dayGroups[startIndex];
+
+      // 1. If current earliest day in view has more than earliestDayLimit messages already loaded in memory:
       if (earliestGroup && earliestGroup.messages.length > earliestDayLimit) {
         setEarliestDayLimit((prev) => prev + 100);
-      } else {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return;
+      }
+
+      // 2. If there are earlier days already loaded into memory:
+      if (startIndex > 0) {
         setUnlockedDaysCount((prev) => prev + 1);
         setEarliestDayLimit(100);
+        // Pre-fetch next page in the background if running low on loaded days
+        if (startIndex <= 1 && hasMoreInFirestore) {
+          fetchOlderPage().catch(() => {});
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        return;
       }
-      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // 3. Need to fetch older page from Firestore:
+      if (hasMoreInFirestore) {
+        const fetched = await fetchOlderPage();
+        if (fetched) {
+          setUnlockedDaysCount((prev) => prev + 1);
+          setEarliestDayLimit(100);
+        }
+      }
     } finally {
       setIsLoadingEarlier(false);
     }
-  }, [isLoadingEarlier, hasMoreEarlier, dayGroups, unlockedDaysCount, earliestDayLimit]);
+  }, [isLoadingEarlier, hasMoreEarlier, dayGroups, unlockedDaysCount, earliestDayLimit, hasMoreInFirestore, fetchOlderPage]);
 
   return {
     messages: visibleMessages,
-    allLoadedMessages: allMessages,
+    allLoadedMessages,
     loading,
     isLoadingEarlier,
     hasMoreEarlier,
     loadEarlier,
-    isAllCaughtUp: !hasMoreEarlier && allMessages.length > 0,
-    displayedDayCount: Math.min(unlockedDaysCount, dayGroups.length),
+    isAllCaughtUp: !hasMoreEarlier && allLoadedMessages.length > 0,
+    displayedDayCount: Math.min(unlockedDaysCount, Math.max(1, dayGroups.length)),
   };
 }
 
 /**
- * Fetch a previous day's messages using an epoch timestamp cursor.
+ * Fetch a previous day's messages using an epoch timestamp or document cursor.
+ * Truly paginated: fetches at most pageLimit documents via startAfter cursor.
  */
 export async function fetchPreviousDay(
   coupleId: string,
   beforeTimestamp: number,
-  _cursorDoc?: any,
+  cursorDoc?: any,
   pageLimit: number = 100
-): Promise<{ messages: ChatMessage[]; hasMore: boolean }> {
+): Promise<{ messages: ChatMessage[]; hasMore: boolean; nextCursor?: any }> {
   if (!coupleId) return { messages: [], hasMore: false };
   try {
     const messagesCol = collection(db, 'couples', coupleId, 'messages');
-    const snap = await getDocs(messagesCol);
-    const all = snap.docs.map((d: any) => ({
-      id: d.id,
-      ...d.data(),
-    })) as ChatMessage[];
-
-    const earlier = all
-      .filter((m) => normalizeMessageTimestamp(m) < beforeTimestamp)
-      .sort((a, b) => normalizeMessageTimestamp(b) - normalizeMessageTimestamp(a));
-
-    const page = earlier.slice(0, pageLimit).reverse();
+    const q = cursorDoc
+      ? query(messagesCol, orderBy('createdAt', 'desc'), startAfter(cursorDoc), limit(pageLimit))
+      : query(messagesCol, orderBy('createdAt', 'desc'), limit(pageLimit));
+    const snap = await getDocs(q);
+    const rawItems = snap.docs.map(mapDocToChatMessage);
+    const filtered = rawItems.filter((m) => normalizeMessageTimestamp(m) < beforeTimestamp);
+    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : undefined;
     return {
-      messages: page,
-      hasMore: earlier.length > pageLimit,
+      messages: filtered.reverse(),
+      hasMore: snap.docs.length === pageLimit,
+      nextCursor,
     };
   } catch (err) {
     console.warn('[Firestore] fetchPreviousDay error:', err);
     return { messages: [], hasMore: false };
+  }
+}
+
+/**
+ * Migration & backfill helper for legacy messages lacking the canonical indexed `createdAt` field.
+ * Safely inspects a page of messages and updates any legacy records with a normalized Firestore Timestamp.
+ */
+export async function backfillLegacyMessageTimestamps(coupleId: string, batchSize: number = 100): Promise<number> {
+  if (!coupleId) return 0;
+  try {
+    const messagesCol = collection(db, 'couples', coupleId, 'messages');
+    const snap = await getDocs(query(messagesCol, limit(batchSize)));
+    const batch = writeBatch(db);
+    let count = 0;
+
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data();
+      if (!data.createdAt) {
+        const ms = normalizeMessageTimestamp({ id: docSnap.id, ...data });
+        batch.update(docSnap.ref, {
+          createdAt: new Date(ms),
+          clientTimestamp: ms,
+          created_at: new Date(ms).toISOString(),
+        });
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      await batch.commit();
+    }
+    return count;
+  } catch (err) {
+    console.warn('[Firestore] backfillLegacyMessageTimestamps error:', err);
+    return 0;
   }
 }
 

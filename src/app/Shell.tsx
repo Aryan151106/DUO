@@ -91,26 +91,41 @@ export const Shell: React.FC = () => {
     } catch {}
   }, [setTab]);
 
-  // Background idle tab preloader for instant navigation
+  // Smart idle preloader for most likely next screen, strictly respecting saveData and slow connections
   useEffect(() => {
-    const preloadAll = () => {
-      loadCalendarView();
-      loadChatView();
-      loadTogetherSpace();
-      loadLiveDoodleCanvas();
-      loadSettingsModal();
+    if (typeof window === 'undefined') return;
+
+    // Check data-saver and network constraints
+    const nav = navigator as any;
+    const connection = nav?.connection || nav?.mozConnection || nav?.webkitConnection;
+    if (connection?.saveData) return;
+    if (connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
+
+    // Preload only the most likely companion screen (Chat if on Today; Today if on Chat)
+    const targetNext = activeTab === 'today' ? loadChatView : activeTab === 'chat' ? loadTaskList : null;
+    if (!targetNext) return;
+
+    const runIdlePreload = () => {
+      try {
+        targetNext();
+      } catch {}
     };
 
-    if (typeof window !== 'undefined') {
-      if ('requestIdleCallback' in window) {
-        (window as any).requestIdleCallback(preloadAll);
-      } else {
-        setTimeout(preloadAll, 1200);
-      }
+    if ('requestIdleCallback' in window) {
+      const handle = (window as any).requestIdleCallback(runIdlePreload, { timeout: 3500 });
+      return () => (window as any).cancelIdleCallback(handle);
+    } else {
+      const timer = (globalThis as any).setTimeout(runIdlePreload, 2500);
+      return () => (globalThis as any).clearTimeout(timer);
     }
-  }, []);
+  }, [activeTab]);
 
   const preloadTab = (tabId: string) => {
+    // Also skip hover preload on saveData
+    const nav = navigator as any;
+    const connection = nav?.connection || nav?.mozConnection || nav?.webkitConnection;
+    if (connection?.saveData) return;
+
     switch (tabId) {
       case 'today':
         loadTaskList();
@@ -155,7 +170,7 @@ export const Shell: React.FC = () => {
   }, [activeTab, couple?.id, unreadCount, markAllAsRead]);
 
   return (
-    <div className="h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] select-none overflow-hidden lg:grid lg:grid-cols-[96px_minmax(0,1fr)] lg:grid-rows-[72px_1fr] flex flex-col">
+    <div className="h-screen h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] select-none overflow-hidden lg:grid lg:grid-cols-[96px_minmax(0,1fr)] lg:grid-rows-[72px_1fr] flex flex-col">
       {/* DESKTOP VERTICAL LEFT SIDEBAR RAIL (>=1024px) */}
       {/* Flush with left edge, full height from top to bottom (row 1 to 2) */}
       <aside className="hidden lg:flex flex-col items-center py-4 px-2 w-[96px] h-full col-start-1 row-start-1 row-span-2 border-r-2 border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0 z-30">

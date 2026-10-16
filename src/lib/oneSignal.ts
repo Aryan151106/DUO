@@ -3,6 +3,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
 import { useAuthStore } from './store';
 
+let initPromise: Promise<boolean> | null = null;
 let isInitialized = false;
 
 export interface OneSignalConfig {
@@ -12,7 +13,7 @@ export interface OneSignalConfig {
 export function getOneSignalConfig(): OneSignalConfig {
   const envAppId = import.meta.env.VITE_ONESIGNAL_APP_ID || '';
   const localAppId = typeof window !== 'undefined' ? localStorage.getItem('duo_onesignal_app_id') || '' : '';
-  const appId = (envAppId || localAppId || 'fa8f0dbb-1361-4fa3-b1d7-2f3b95d038dc').trim();
+  const appId = (envAppId || localAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
 
   // Actively purge any legacy exposed REST API key from client storage
   if (typeof window !== 'undefined') {
@@ -59,50 +60,81 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
     return false;
   }
 
+  if (initPromise) {
+    if (userId) {
+      void initPromise.then(() => bindOneSignalUser(userId));
+    }
+    return initPromise;
+  }
+
+  initPromise = (async () => {
+    try {
+      const win = window as any;
+
+      if (!isInitialized) {
+        try {
+          await OneSignal.init({
+            appId,
+            allowLocalhostAsSecureOrigin: true,
+            notifyButton: { enable: false } as any,
+          });
+          isInitialized = true;
+        } catch {
+          // May already be initialized via index.html or script
+          isInitialized = true;
+        }
+      }
+
+      // Register notification click listener for deep linking to screens
+      try {
+        const notifApi = win.OneSignal?.Notifications || (OneSignal as any).Notifications;
+        if (notifApi?.addEventListener) {
+          notifApi.addEventListener('click', (event: any) => {
+            const data = event?.notification?.additionalData;
+            if (data?.action || data?.tab) {
+              const targetTab = data.action || data.tab;
+              useAuthStore.getState().setTab(targetTab);
+            }
+          });
+        }
+      } catch {
+        // Notification listener notice
+      }
+
+      if (userId) {
+        await bindOneSignalUser(userId);
+      }
+
+      return true;
+    } catch (error) {
+      console.warn('[OneSignal] Initialization notice:', error);
+      return false;
+    }
+  })();
+
+  return initPromise;
+}
+
+async function bindOneSignalUser(userId: string) {
   try {
     const win = window as any;
+    if (win.OneSignal?.login) {
+      await win.OneSignal.login(userId);
+    } else if (OneSignal.login) {
+      await OneSignal.login(userId);
+    }
+    console.log('[OneSignal] User subscription successfully linked');
 
-    if (!isInitialized) {
-      try {
-        await OneSignal.init({
-          appId,
-          allowLocalhostAsSecureOrigin: true,
-          notifyButton: { enable: false } as any,
-        });
-        isInitialized = true;
-        console.log('[OneSignal] Initialized successfully with App ID:', appId);
-      } catch (err) {
-        // May already be initialized via script or prior call
-        isInitialized = true;
+    // If permission is already granted in the browser, ensure OneSignal push subscription is opted in
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      if (win.OneSignal?.User?.PushSubscription?.optIn) {
+        await win.OneSignal.User.PushSubscription.optIn();
+      } else if (OneSignal.User?.PushSubscription?.optIn) {
+        await OneSignal.User.PushSubscription.optIn();
       }
     }
-
-    if (userId) {
-      try {
-        if (win.OneSignal?.login) {
-          await win.OneSignal.login(userId);
-        } else if (OneSignal.login) {
-          await OneSignal.login(userId);
-        }
-        console.log('[OneSignal] Logged in external user:', userId);
-
-        // If permission is already granted in the browser, ensure OneSignal push subscription is opted in
-        if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-          if (win.OneSignal?.User?.PushSubscription?.optIn) {
-            await win.OneSignal.User.PushSubscription.optIn();
-          } else if (OneSignal.User?.PushSubscription?.optIn) {
-            await OneSignal.User.PushSubscription.optIn();
-          }
-        }
-      } catch (e) {
-        console.warn('[OneSignal] User push subscription setup notice:', e);
-      }
-    }
-
-    return true;
-  } catch (error) {
-    console.warn('[OneSignal] Initialization error:', error);
-    return false;
+  } catch (e) {
+    console.warn('[OneSignal] User push subscription setup notice:', e);
   }
 }
 

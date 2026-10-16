@@ -31,6 +31,7 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const images = attachments.filter((a) => a.type === 'image');
   const videos = attachments.filter((a) => a.type === 'video');
@@ -171,24 +172,48 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
           {(isGallery ? images : images.slice(0, 4)).map((img, idx) => {
             const isFourthAndMore = !isGallery && idx === 3 && images.length > 4;
             const extraCount = images.length - 4;
+            const isFailed = failedImages[img.id];
 
             return (
               <div
                 key={img.id}
                 onClick={() => {
+                  if (isFailed) return;
                   soundEffects.playPop();
                   setLightboxIndex(idx);
                 }}
                 className={`relative aspect-square overflow-hidden bg-[var(--surface-2)] cursor-pointer group rounded-2xl border-2 border-[var(--border)] shadow-xs hover:border-[var(--partner-a)] transition-all`}
               >
-                <img
-                  src={img.url}
-                  alt={img.fileName}
-                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
-                  loading="lazy"
-                />
+                {isFailed ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center p-2 text-center bg-[var(--surface-2)]">
+                    <span className="text-base select-none">📷</span>
+                    <span className="font-ui text-[10px] text-[var(--text-muted)] mt-1 font-semibold">Failed to load</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFailedImages((prev) => {
+                          const next = { ...prev };
+                          delete next[img.id];
+                          return next;
+                        });
+                      }}
+                      className="mt-1 px-2 py-0.5 rounded-lg bg-[var(--surface)] text-[10px] font-ui font-bold border border-[var(--border)] hover:bg-[var(--accent)] cursor-pointer"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : (
+                  <img
+                    src={img.thumbnailUrl || img.url}
+                    alt={img.fileName}
+                    className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                    loading="lazy"
+                    onError={() => setFailedImages((prev) => ({ ...prev, [img.id]: true }))}
+                  />
+                )}
 
-                {isFourthAndMore && (
+                {!isFailed && isFourthAndMore && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center text-white font-chunky text-xl font-bold">
                     +{extraCount}
                   </div>

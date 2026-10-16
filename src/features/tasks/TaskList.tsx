@@ -291,19 +291,12 @@ export const TaskList: React.FC = () => {
     { label: 'Hydrate 💧', sound: 720 },
   ];
 
-  const handleSparkClick = (freq: number) => {
+  const handleSparkClick = (_freq: number) => {
     try {
-      const audio = new AudioContext();
-      const osc = audio.createOscillator();
-      const gain = audio.createGain();
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.2, audio.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audio.currentTime + 0.15);
-      osc.connect(gain);
-      gain.connect(audio.destination);
-      osc.start();
-      osc.stop(audio.currentTime + 0.15);
-    } catch {}
+      soundEffects.playSuccess();
+    } catch {
+      soundEffects.playPop();
+    }
   };
 
   const toggleSection = (id: string) => {

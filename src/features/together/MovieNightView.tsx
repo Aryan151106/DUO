@@ -19,7 +19,9 @@ import {
 } from '../../lib/togetherRooms';
 import { useAuthStore } from '../../lib/store';
 import { soundEffects, soundManager } from '../../lib/sound';
-import { LiveKitMediaRoom } from './LiveKitMediaRoom';
+const LiveKitMediaRoom = React.lazy(() =>
+  import('./LiveKitMediaRoom').then((m) => ({ default: m.LiveKitMediaRoom }))
+);
 import { SocketVideoRoom } from './SocketVideoRoom';
 import { CallRoom } from './CallRoom';
 import confetti from 'canvas-confetti';
@@ -80,16 +82,25 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
   const [isJoined, setIsJoined] = useState(false);
   const [callType, setCallType] = useState<'livekit' | 'socket' | 'webrtc'>('livekit');
 
+  // Idempotent join tracking refs to prevent duplicate calls in React Strict Mode or fast re-renders
+  const joinedRoomIdRef = useRef<string | null>(null);
+  const inFlightJoinRef = useRef<boolean>(false);
+
   // Floating Reactions
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
 
   const handleJoinRoom = async (roomIdToJoin?: string) => {
     const targetRoomId = roomIdToJoin || currentRoom?.roomId;
-    if (!targetRoomId || isJoined) return;
+    if (!targetRoomId || isJoined || inFlightJoinRef.current || joinedRoomIdRef.current === targetRoomId) {
+      return;
+    }
+
+    inFlightJoinRef.current = true;
+    setIsJoining(true);
     try {
-      setIsJoining(true);
       soundEffects.playPop();
       const res = await joinTogetherRoom(targetRoomId);
+      joinedRoomIdRef.current = targetRoomId;
       setLivekitData({
         serverUrl: res.serverUrl,
         token: res.token,
@@ -104,15 +115,23 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
       setIsJoined(true);
     } finally {
       setIsJoining(false);
+      inFlightJoinRef.current = false;
     }
   };
 
   // Auto join room if active
   useEffect(() => {
-    if (currentRoom && currentRoom.status !== 'ended' && !isJoined && !isJoining) {
+    if (
+      currentRoom &&
+      currentRoom.status !== 'ended' &&
+      !isJoined &&
+      !isJoining &&
+      !inFlightJoinRef.current &&
+      joinedRoomIdRef.current !== currentRoom.roomId
+    ) {
       handleJoinRoom(currentRoom.roomId);
     }
-  }, [currentRoom?.roomId, currentRoom?.status, isJoined]);
+  }, [currentRoom?.roomId, currentRoom?.status, isJoined, isJoining]);
 
   // Sync incoming Socket.IO reactions to floating emojis
   const lastReactionIdRef = useRef<string | null>(null);
@@ -170,6 +189,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
         return;
       }
       const res = await createTogetherRoom('movie', movieTitleInput.trim());
+      joinedRoomIdRef.current = res.roomId;
       setLivekitData({
         serverUrl: res.serverUrl,
         token: res.token,
@@ -189,6 +209,8 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
   const handleLeaveRoom = () => {
     soundManager.playPing();
+    joinedRoomIdRef.current = null;
+    inFlightJoinRef.current = false;
     setIsJoined(false);
     setLivekitData(null);
   };
@@ -425,29 +447,37 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
             <div className="w-full h-[clamp(360px,62dvh,760px)] lg:h-full lg:sticky lg:top-2 min-h-0">
               {callType === 'livekit' ? (
-                <LiveKitMediaRoom
-                  serverUrl={livekitData.serverUrl}
-                  token={livekitData.token}
-                  roomName={livekitData.roomName}
-                  displayName={livekitData.displayName}
-                  type="movie"
-                  onLeave={handleLeaveRoom}
-                  onSwitchToWebRTC={() => setCallType('webrtc')}
-                  onBeforeScreenShare={claimScreenShare}
-                  onScreenShareStopped={releaseScreenShare}
-                  screenShareNotice={screenShareNotice}
-                  customControls={
-                    <button
-                      type="button"
-                      onClick={handleEndSession}
-                      className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
-                      title="End movie session for both partners"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">End Session</span>
-                    </button>
+                <React.Suspense
+                  fallback={
+                    <div className="h-full w-full flex items-center justify-center p-8 bg-[var(--surface-2)] rounded-3xl border-2 border-[var(--border)]">
+                      <div className="w-8 h-8 rounded-full border-3 border-[var(--accent)] border-t-transparent animate-spin" />
+                    </div>
                   }
-                />
+                >
+                  <LiveKitMediaRoom
+                    serverUrl={livekitData.serverUrl}
+                    token={livekitData.token}
+                    roomName={livekitData.roomName}
+                    displayName={livekitData.displayName}
+                    type="movie"
+                    onLeave={handleLeaveRoom}
+                    onSwitchToWebRTC={() => setCallType('webrtc')}
+                    onBeforeScreenShare={claimScreenShare}
+                    onScreenShareStopped={releaseScreenShare}
+                    screenShareNotice={screenShareNotice}
+                    customControls={
+                      <button
+                        type="button"
+                        onClick={handleEndSession}
+                        className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                        title="End movie session for both partners"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">End Session</span>
+                      </button>
+                    }
+                  />
+                </React.Suspense>
               ) : callType === 'socket' ? (
                 <SocketVideoRoom
                   roomId={activeRoomId || currentRoom?.roomId || 'movie-duo'}

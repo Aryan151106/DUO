@@ -167,4 +167,65 @@ describe('chatHistory engine', () => {
       expect(calculateScrollCompensation(1000, 950, 200)).toBe(200);
     });
   });
+
+  describe('Bounded pagination and within-day paging (>100 messages)', () => {
+    it('slices a day with over 100 messages bounded to limit before advancing to previous day', () => {
+      // Create 150 messages for today and 10 for yesterday
+      const todayMs = new Date('2026-10-16T12:00:00Z').getTime();
+      const yesterdayMs = new Date('2026-10-15T12:00:00Z').getTime();
+
+      const messages: ChatMessage[] = [];
+      for (let i = 0; i < 10; i++) {
+        messages.push({
+          id: `y-${i}`,
+          couple_id: 'c1',
+          sender_id: 'u1',
+          content: `Yesterday ${i}`,
+          message_type: 'text',
+          created_at: new Date(yesterdayMs + i * 1000).toISOString(),
+        });
+      }
+      for (let i = 0; i < 150; i++) {
+        messages.push({
+          id: `t-${i}`,
+          couple_id: 'c1',
+          sender_id: 'u2',
+          content: `Today ${i}`,
+          message_type: 'text',
+          created_at: new Date(todayMs + i * 1000).toISOString(),
+        });
+      }
+
+      const groups = groupMessagesByDay(messages, 'UTC');
+      expect(groups.length).toBe(2);
+      expect(groups[0].messages.length).toBe(10); // yesterday
+      expect(groups[1].messages.length).toBe(150); // today
+
+      // When unlockedDaysCount = 1 (only latest day) and earliestDayLimit = 100:
+      const visibleGroups1 = groups.slice(-1);
+      const earliestGroup1 = visibleGroups1[0];
+      const page1 = earliestGroup1.messages.slice(-100);
+      expect(page1.length).toBe(100);
+      expect(page1[page1.length - 1].id).toBe('t-149');
+      expect(page1[0].id).toBe('t-50');
+
+      // When user scrolls to top of page 1, earliestDayLimit expands to 200:
+      const page2 = earliestGroup1.messages.slice(-200);
+      expect(page2.length).toBe(150);
+      expect(page2[0].id).toBe('t-0');
+
+      // Now all of today is shown; next scroll to top advances unlockedDaysCount to 2:
+      const visibleGroups2 = groups.slice(-2);
+      expect(visibleGroups2.length).toBe(2);
+      expect(visibleGroups2[0].dateKey).toBe('2026-10-15');
+    });
+
+    it('falls back to documented fallback timezone when timezone is invalid or undefined', () => {
+      const ts = new Date('2026-10-15T12:00:00Z').getTime();
+      // Should not throw even with invalid timezone string; falls back gracefully
+      const key = getDateKeyForTimestamp(ts, 'INVALID_TZ_XYZ');
+      expect(typeof key).toBe('string');
+      expect(key).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    });
+  });
 });

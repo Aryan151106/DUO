@@ -22,9 +22,10 @@ import {
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, app } from './firebase';
 import { sendMessage } from './firestore';
-import { isCloudStorageAvailable, blobToDataUrl, setCloudStorageEnabled } from './storageService';
+import { isCloudStorageAvailable } from './storageService';
 import { useAuthStore } from './store';
 import { useNotificationStore } from './notifications';
+import { indexSharedMediaItem } from './sharedMedia';
 
 export interface DoodleMetadata {
   id: string;
@@ -232,18 +233,12 @@ export async function uploadDoodle(params: {
       ]);
       imageUrl = urls[0];
       thumbnailUrl = urls[1];
-    } catch (storageErr) {
-      console.warn('[DoodleStorage] Cloud storage failed or CORS blocked, using instant direct data URL:', storageErr);
-      setCloudStorageEnabled(false);
-      imageUrl = await blobToDataUrl(fullBlob);
-      thumbnailUrl = await blobToDataUrl(thumbBlob);
+    } catch (storageErr: any) {
+      console.error('[DoodleStorage] Cloud storage upload failed:', storageErr);
+      throw (storageErr instanceof Error ? storageErr : new Error('Drawing upload failed. Please tap Retry.'));
     }
   } else {
-    // Instant Direct Sync pipeline
-    onProgress?.(60);
-    imageUrl = await blobToDataUrl(fullBlob);
-    thumbnailUrl = await blobToDataUrl(thumbBlob);
-    onProgress?.(80);
+    throw new Error('Cloud Storage is unavailable. Could not save drawing to server.');
   }
 
   // 4. Save metadata document in Firestore at couples/{spaceId}/doodles/{doodleId}
@@ -284,6 +279,24 @@ export async function uploadDoodle(params: {
     title: 'New Doodle 🎨',
     body: caption ? `Doodle: ${caption}` : 'Sent you a doodle note!',
     deepLink: '/?action=doodle',
+  });
+
+  // Index into Shared Media Vault
+  void indexSharedMediaItem(spaceId, {
+    id: doodleId,
+    category: 'doodles',
+    name: caption || 'Shared Doodle',
+    url: imageUrl,
+    thumbnailUrl: thumbnailUrl || imageUrl,
+    path: fullPath,
+    createdAt: new Date().toISOString(),
+    timestamp: Date.now(),
+    source: 'doodle',
+    sourceId: doodleId,
+    senderId: userId,
+    caption: caption || '',
+    width,
+    height,
   });
 
   onProgress?.(100);

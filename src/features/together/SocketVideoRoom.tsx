@@ -382,6 +382,12 @@ export const SocketVideoRoom: React.FC<SocketVideoRoomProps> = ({
       }
 
       // Start screen share
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+        setConnectError('Screen sharing is not supported by this mobile browser.');
+        setTimeout(() => setConnectError(null), 5000);
+        return;
+      }
+
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true,
