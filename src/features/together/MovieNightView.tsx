@@ -37,7 +37,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 }) => {
   const { currentUser, partnerUser, couple, isDemoMode } = useAuthStore();
   const coupleId =
-    !isDemoMode && couple?.id && !couple.id.startsWith('demo') && couple.id !== 'couple-duo-main'
+    !isDemoMode && couple?.id && !couple.id.startsWith('demo')
       ? couple.id
       : 'demo-couple';
 
@@ -62,6 +62,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
   // Local state for setup
   const [isStarting, setIsStarting] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [movieTitleInput, setMovieTitleInput] = useState('SCREEN TIME: ABSOLUTE CINEMA 🍿');
   const [cinemaMode, setCinemaMode] = useState(false);
   const [chatInput, setChatInput] = useState('');
@@ -82,25 +83,36 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
   // Floating Reactions
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
 
+  const handleJoinRoom = async (roomIdToJoin?: string) => {
+    const targetRoomId = roomIdToJoin || currentRoom?.roomId;
+    if (!targetRoomId || isJoined) return;
+    try {
+      setIsJoining(true);
+      soundEffects.playPop();
+      const res = await joinTogetherRoom(targetRoomId);
+      setLivekitData({
+        serverUrl: res.serverUrl,
+        token: res.token,
+        roomName: res.roomName,
+        displayName: currentUser.displayName || 'Partner',
+      });
+      setCallType(res.token ? 'livekit' : 'webrtc');
+      setIsJoined(true);
+    } catch (err) {
+      console.error('[MovieNight] Error joining room:', err);
+      setCallType('webrtc');
+      setIsJoined(true);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
   // Auto join room if active
   useEffect(() => {
-    if (currentRoom && currentRoom.status !== 'ended' && !isJoined) {
-      joinTogetherRoom(currentRoom.roomId)
-        .then((res) => {
-          setLivekitData({
-            serverUrl: res.serverUrl,
-            token: res.token,
-            roomName: res.roomName,
-            displayName: currentUser.displayName || 'Partner',
-          });
-          setCallType(res.token ? 'livekit' : 'webrtc');
-          setIsJoined(true);
-        })
-        .catch((err) => {
-          console.warn('[MovieNight] Auto-join failed:', err);
-        });
+    if (currentRoom && currentRoom.status !== 'ended' && !isJoined && !isJoining) {
+      handleJoinRoom(currentRoom.roomId);
     }
-  }, [currentRoom?.roomId, currentRoom?.status, isJoined, currentUser.displayName]);
+  }, [currentRoom?.roomId, currentRoom?.status, isJoined]);
 
   // Sync incoming Socket.IO reactions to floating emojis
   const lastReactionIdRef = useRef<string | null>(null);
@@ -148,11 +160,15 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
     socketSendReaction(emoji);
   };
 
-  // Start new Movie Room
+  // Start new Movie Room (or join if already active)
   const handleStartSession = async () => {
     try {
       setIsStarting(true);
       soundEffects.playPop();
+      if (currentRoom && currentRoom.status !== 'ended') {
+        await handleJoinRoom(currentRoom.roomId);
+        return;
+      }
       const res = await createTogetherRoom('movie', movieTitleInput.trim());
       setLivekitData({
         serverUrl: res.serverUrl,
@@ -164,6 +180,8 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
       setIsJoined(true);
     } catch (err) {
       console.error('[MovieNight] Error starting movie room:', err);
+      setCallType('webrtc');
+      setIsJoined(true);
     } finally {
       setIsStarting(false);
     }
@@ -196,6 +214,61 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
   const screenShareNotice = isPartnerSharing
     ? `${partnerUser.displayName || 'Partner'} is sharing screen 📺`
     : null;
+
+  // If an active room exists and user is not joined: Show "Join Partner" Hero Card
+  if (currentRoom && currentRoom.status !== 'ended' && !isJoined) {
+    const hostName = (currentRoom as any).hostName || (currentRoom.hostUid === currentUser.id ? 'You' : partnerUser.displayName || 'Partner');
+    const isFromPartner = currentRoom.hostUid !== currentUser.id;
+
+    return (
+      <div className="w-full max-w-2xl mx-auto bg-[var(--surface)] border-3 border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-[0_4px_0_var(--shadow-color)] relative overflow-hidden space-y-6 animate-in fade-in duration-300">
+        <div className="absolute top-0 left-0 right-0 h-2 bg-rose-500" />
+
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-500 border-2 border-[var(--border)] flex items-center justify-center p-3 shrink-0 shadow-[0_2px_0_var(--shadow-color)]">
+            <Film className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-ui text-xs font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Theater Open & Live</span>
+              </span>
+            </div>
+            <h3 className="font-chunky text-2xl font-bold text-[var(--text)] mt-1">
+              {isFromPartner ? `${hostName} started Movie Night! 🍿` : 'Your Movie Night is Live!'}
+            </h3>
+            <p className="font-ui text-xs text-[var(--text-muted)] mt-0.5">
+              {isFromPartner
+                ? `Join ${hostName} for screen sharing, synced video, and cozy vibes.`
+                : 'Waiting for your partner to join the theater.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] space-y-2">
+          <div className="flex items-center justify-between text-xs font-ui">
+            <span className="text-[var(--text-muted)] font-semibold">LiveKit Room:</span>
+            <span className="font-mono font-bold text-rose-500">{currentRoom.roomName || `duo-${coupleId}-movie`}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs font-ui">
+            <span className="text-[var(--text-muted)] font-semibold">Movie / Stream:</span>
+            <span className="font-bold text-[var(--text)]">{currentRoom.movie?.title || movieTitleInput}</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleJoinRoom(currentRoom.roomId)}
+          disabled={isJoining}
+          className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
+        >
+          <Sparkles className="w-5 h-5 fill-current animate-pulse" />
+          <span>{isJoining ? 'Entering Theater…' : isFromPartner ? `Join ${hostName}'s Theater 🍿` : 'Enter Theater 🚪'}</span>
+        </button>
+      </div>
+    );
+  }
 
   // If no session is open and not joined: Show Start Card
   if ((!currentRoom || currentRoom.status === 'ended') && !isJoined) {

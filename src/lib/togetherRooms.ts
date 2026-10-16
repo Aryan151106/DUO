@@ -10,6 +10,7 @@ import {
   query,
   where,
   limit,
+  getDocs,
 } from 'firebase/firestore';
 
 import { io, Socket } from 'socket.io-client';
@@ -156,7 +157,35 @@ export async function createTogetherRoom(
   const coupleId = couple?.id || 'couple-duo';
   const partnerId = authState.partnerUser?.id || null;
   const displayName = authState.currentUser?.displayName || auth.currentUser.displayName || 'Partner';
+  const deterministicRoomId = `${type}-${coupleId}`.toLowerCase();
 
+  // 1. Check if an active room of this type already exists for this couple
+  try {
+    const existingQ = query(
+      collection(db, 'togetherRooms'),
+      where('coupleId', '==', coupleId),
+      limit(10)
+    );
+    const existingSnap = await getDocs(existingQ);
+    const existingRoom = existingSnap.docs
+      .map((d) => ({ roomId: d.id, ...d.data() } as TogetherRoom))
+      .find((r) => r.type === type && (r.status === 'waiting' || r.status === 'active'));
+
+    if (existingRoom) {
+      console.log('[TogetherRooms] Active room already exists for couple, joining instead of creating duplicate:', existingRoom.roomId);
+      const joined = await joinTogetherRoom(existingRoom.roomId);
+      return {
+        roomId: joined.roomId,
+        roomName: joined.roomName,
+        serverUrl: joined.serverUrl,
+        token: joined.token,
+      };
+    }
+  } catch (checkErr) {
+    console.warn('[TogetherRooms] Existing room check notice:', checkErr);
+  }
+
+  // 2. Request LiveKit token & create authoritative room
   const idToken = await auth.currentUser.getIdToken();
   const res = await fetch(`${socketUrl}/api/livekit/create-room`, {
     method: 'POST',
@@ -169,6 +198,7 @@ export async function createTogetherRoom(
       initialTitle,
       coupleId,
       displayName,
+      roomId: deterministicRoomId,
     }),
   });
 
@@ -182,7 +212,7 @@ export async function createTogetherRoom(
     throw new Error('Backend failed to issue a LiveKit token for this session.');
   }
 
-  // Ensure durable Firestore room document exists under authorized client credentials
+  // 3. Ensure durable Firestore room document exists under authorized client credentials
   try {
     const roomRef = doc(db, 'togetherRooms', data.roomId);
     await setDoc(roomRef, {
@@ -190,11 +220,13 @@ export async function createTogetherRoom(
       type,
       status: 'waiting',
       hostUid: auth.currentUser.uid,
+      hostName: displayName,
       memberUids: [auth.currentUser.uid, ...(partnerId ? [partnerId] : [])],
       coupleId,
       roomName: data.roomName,
       serverUrl: data.serverUrl,
       createdAt: serverTimestamp(),
+      createdMs: Date.now(),
       endedAt: null,
       revision: 1,
       study: type === 'study' ? {
@@ -378,7 +410,7 @@ export function useActiveTogetherRoom(coupleId: string | null, type: RoomType): 
   const [activeRoom, setActiveRoom] = useState<TogetherRoom | null>(null);
 
   useEffect(() => {
-    if (!coupleId || coupleId.startsWith('demo') || coupleId === 'couple-duo-main') {
+    if (!coupleId || coupleId.startsWith('demo')) {
       setActiveRoom(null);
       return;
     }
@@ -393,9 +425,24 @@ export function useActiveTogetherRoom(coupleId: string | null, type: RoomType): 
     const unsub = onSnapshot(
       q,
       (snap) => {
+        const now = Date.now();
         const found = snap.docs
           .map((d) => ({ roomId: d.id, ...d.data() } as TogetherRoom))
-          .find((r) => r.type === type && (r.status === 'waiting' || r.status === 'active'));
+          .find((r) => {
+            if (r.type !== type) return false;
+            if (r.status !== 'waiting' && r.status !== 'active') return false;
+            const createdMs = typeof (r as any).createdMs === 'number'
+              ? (r as any).createdMs
+              : typeof r.createdAt === 'number'
+              ? r.createdAt
+              : (r.createdAt as any)?.toMillis
+              ? (r.createdAt as any).toMillis()
+              : (r.createdAt as any)?.seconds
+              ? (r.createdAt as any).seconds * 1000
+              : 0;
+            const isStale = createdMs > 0 && (now - createdMs > 6 * 60 * 60 * 1000);
+            return !isStale;
+          });
         setActiveRoom(found || null);
       },
       (err) => {
@@ -413,7 +460,7 @@ export function useAnyActiveTogetherRoom(coupleId: string | null): TogetherRoom 
   const [activeRoom, setActiveRoom] = useState<TogetherRoom | null>(null);
 
   useEffect(() => {
-    if (!coupleId || coupleId.startsWith('demo') || coupleId === 'couple-duo-main') {
+    if (!coupleId || coupleId.startsWith('demo')) {
       setActiveRoom(null);
       return;
     }
@@ -432,19 +479,17 @@ export function useAnyActiveTogetherRoom(coupleId: string | null): TogetherRoom 
           .map((d) => ({ roomId: d.id, ...d.data() } as TogetherRoom))
           .find((r) => {
             if (r.status !== 'waiting' && r.status !== 'active') return false;
-            const createdMs = typeof r.createdAt === 'number'
+            const createdMs = typeof (r as any).createdMs === 'number'
+              ? (r as any).createdMs
+              : typeof r.createdAt === 'number'
               ? r.createdAt
               : (r.createdAt as any)?.toMillis
               ? (r.createdAt as any).toMillis()
               : (r.createdAt as any)?.seconds
               ? (r.createdAt as any).seconds * 1000
               : 0;
-            const isStale = createdMs <= 0 || (now - createdMs > 45 * 60 * 1000); // Auto-expire after 45m or invalid
-            if (isStale) {
-              endTogetherRoom(r.roomId).catch(() => {});
-              return false;
-            }
-            return true;
+            const isStale = createdMs > 0 && (now - createdMs > 6 * 60 * 60 * 1000);
+            return !isStale;
           });
         setActiveRoom(found || null);
       },

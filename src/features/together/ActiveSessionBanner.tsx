@@ -57,12 +57,13 @@ export const ActiveSessionBanner: React.FC<ActiveSessionBannerProps> = ({
 
   const title = isStudy ? 'Study Space is Open' : 'Movie Night is Open';
   const partnerName =
+    ('hostName' in session ? (session as any).hostName : null) ||
     ('createdByName' in session ? (session as any).createdByName : null) ||
     partnerUser.displayName ||
     'Your partner';
   const description = isCreator
-    ? `You opened this room. Waiting for your partner to join when ready.`
-    : `${partnerName} opened this room. Tap to join!`;
+    ? `You opened this room. Waiting for your partner to join!`
+    : `${partnerName} started ${isStudy ? 'Study Space' : 'Movie Night'}! Tap to join together.`;
 
   return (
     <div className="w-full bg-[var(--surface)] border-3 border-[var(--border)] rounded-3xl p-4 sm:p-5 shadow-[0_4px_0_var(--shadow-color)] relative overflow-hidden animate-in slide-in-from-top-4 duration-300">
@@ -111,12 +112,12 @@ export const ActiveSessionBanner: React.FC<ActiveSessionBannerProps> = ({
               }}
               className={`flex-1 sm:flex-none px-5 py-2.5 rounded-2xl border-2 border-[var(--border)] font-chunky font-bold text-xs flex items-center justify-center gap-2 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer ${
                 isStudy
-                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                  : 'bg-rose-600 hover:bg-rose-500 text-white'
+                  ? 'bg-indigo-600 hover:bg-indigo-500 text-white animate-pulse'
+                  : 'bg-rose-600 hover:bg-rose-500 text-white animate-pulse'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 fill-current" />
-              <span>Join Room</span>
+              <span>Join {isStudy ? 'Study Space' : 'Movie Night'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           ) : (

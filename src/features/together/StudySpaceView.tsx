@@ -36,7 +36,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
 }) => {
   const { currentUser, partnerUser, couple, isDemoMode } = useAuthStore();
   const coupleId =
-    !isDemoMode && couple?.id && !couple.id.startsWith('demo') && couple.id !== 'couple-duo-main'
+    !isDemoMode && couple?.id && !couple.id.startsWith('demo')
       ? couple.id
       : 'demo-couple';
 
@@ -72,6 +72,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
 
   // Local state for launching a new room
   const [isStarting, setIsStarting] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const [taskNameInput, setTaskNameInput] = useState('Deep Work & Cozy Study');
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [breakMinutes, setBreakMinutes] = useState(5);
@@ -100,25 +101,36 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
   const audioContextRef = useRef<AudioContext | null>(null);
   const noiseNodeRef = useRef<AudioNode | null>(null);
 
+  const handleJoinRoom = async (roomIdToJoin?: string) => {
+    const targetRoomId = roomIdToJoin || currentRoom?.roomId;
+    if (!targetRoomId || isJoined) return;
+    try {
+      setIsJoining(true);
+      soundEffects.playPop();
+      const res = await joinTogetherRoom(targetRoomId);
+      setLivekitData({
+        serverUrl: res.serverUrl,
+        token: res.token,
+        roomName: res.roomName,
+        displayName: currentUser.displayName || 'Partner',
+      });
+      setCallType(res.token ? 'livekit' : 'webrtc');
+      setIsJoined(true);
+    } catch (err) {
+      console.error('[StudySpace] Error joining room:', err);
+      setCallType('webrtc');
+      setIsJoined(true);
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
   // Auto-join active room if open
   useEffect(() => {
-    if (currentRoom && currentRoom.status !== 'ended' && !isJoined) {
-      joinTogetherRoom(currentRoom.roomId)
-        .then((res) => {
-          setLivekitData({
-            serverUrl: res.serverUrl,
-            token: res.token,
-            roomName: res.roomName,
-            displayName: currentUser.displayName || 'Partner',
-          });
-          setCallType(res.token ? 'livekit' : 'webrtc');
-          setIsJoined(true);
-        })
-        .catch((err) => {
-          console.warn('[StudySpace] Auto-join room error:', err);
-        });
+    if (currentRoom && currentRoom.status !== 'ended' && !isJoined && !isJoining) {
+      handleJoinRoom(currentRoom.roomId);
     }
-  }, [currentRoom?.roomId, currentRoom?.status, isJoined, currentUser.displayName]);
+  }, [currentRoom?.roomId, currentRoom?.status, isJoined]);
 
   // Trigger celebratory confetti when timer hits 0
   const hasTriggeredCompleteRef = useRef(false);
@@ -149,11 +161,15 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
     }
   }, [recentReactions, currentUser.id]);
 
-  // Start new Study Space room
+  // Start new Study Space room (or join if already active)
   const handleStartSession = async () => {
     try {
       setIsStarting(true);
       soundEffects.playPop();
+      if (currentRoom && currentRoom.status !== 'ended') {
+        await handleJoinRoom(currentRoom.roomId);
+        return;
+      }
       const res = await createTogetherRoom('study', taskNameInput.trim());
       setLivekitData({
         serverUrl: res.serverUrl,
@@ -165,6 +181,8 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
       setIsJoined(true);
     } catch (err) {
       console.error('[StudySpace] Error starting together room:', err);
+      setCallType('webrtc');
+      setIsJoined(true);
     } finally {
       setIsStarting(false);
     }
@@ -273,6 +291,61 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
     }
     setAmbientSound('none');
   };
+
+  // If an active room exists and user is not joined: Show "Join Partner" Hero Card
+  if (currentRoom && currentRoom.status !== 'ended' && !isJoined) {
+    const hostName = (currentRoom as any).hostName || (currentRoom.hostUid === currentUser.id ? 'You' : partnerUser.displayName || 'Partner');
+    const isFromPartner = currentRoom.hostUid !== currentUser.id;
+
+    return (
+      <div className="w-full max-w-2xl mx-auto bg-[var(--surface)] border-3 border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-[0_4px_0_var(--shadow-color)] relative overflow-hidden space-y-6 animate-in fade-in duration-300">
+        <div className="absolute top-0 left-0 right-0 h-2 bg-indigo-500" />
+
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-500 border-2 border-[var(--border)] flex items-center justify-center p-3 shrink-0 shadow-[0_2px_0_var(--shadow-color)]">
+            <BookOpen className="w-7 h-7" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-ui text-xs font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>Live Focus Space</span>
+              </span>
+            </div>
+            <h3 className="font-chunky text-2xl font-bold text-[var(--text)] mt-1">
+              {isFromPartner ? `${hostName} is studying right now!` : 'Your Study Space is Live!'}
+            </h3>
+            <p className="font-ui text-xs text-[var(--text-muted)] mt-0.5">
+              {isFromPartner
+                ? `Join ${hostName} in the shared focus session.`
+                : 'Waiting for your partner to connect.'}
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] space-y-2">
+          <div className="flex items-center justify-between text-xs font-ui">
+            <span className="text-[var(--text-muted)] font-semibold">LiveKit Room:</span>
+            <span className="font-mono font-bold text-indigo-500">{currentRoom.roomName || `duo-${coupleId}-study`}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs font-ui">
+            <span className="text-[var(--text-muted)] font-semibold">Mode:</span>
+            <span className="font-bold text-[var(--text)] capitalize">{currentRoom.study?.mode || 'Focus'}</span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => handleJoinRoom(currentRoom.roomId)}
+          disabled={isJoining}
+          className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
+        >
+          <Sparkles className="w-5 h-5 fill-current animate-pulse" />
+          <span>{isJoining ? 'Connecting to Room…' : isFromPartner ? `Join ${hostName}'s Study Room 🎧` : 'Enter Study Room 🚪'}</span>
+        </button>
+      </div>
+    );
+  }
 
   // If no room is open and not joined: Show Start Card
   if ((!currentRoom || currentRoom.status === 'ended') && !isJoined) {

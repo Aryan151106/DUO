@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useEffect } from 'react';
+import React, { lazy, Suspense, useEffect, useRef } from 'react';
 import { useAuthStore } from '../lib/store';
 import { useNotificationStore } from '../lib/notifications';
 import { soundManager } from '../lib/sound';
@@ -45,11 +45,27 @@ const NAV_ITEMS = [
 ] as const;
 
 export const Shell: React.FC = () => {
-  const { activeTab, setTab, couple, setTogetherSubTab } = useAuthStore();
+  const { activeTab, setTab, couple, setTogetherSubTab, currentUser } = useAuthStore();
   const activeSession = useActiveSession(couple?.id || null);
   const activeTogetherRoom = useAnyActiveTogetherRoom(couple?.id || null);
   const effectiveSession = activeTogetherRoom || activeSession;
   const { unreadCount, markAllAsRead } = useNotificationStore();
+
+  // Play chime and notify when partner starts a room
+  const prevRoomIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeTogetherRoom && activeTogetherRoom.status !== 'ended') {
+      const isFromPartner = activeTogetherRoom.hostUid !== currentUser.id;
+      if (isFromPartner && prevRoomIdRef.current !== activeTogetherRoom.roomId) {
+        prevRoomIdRef.current = activeTogetherRoom.roomId;
+        try {
+          soundManager.playGentleChime();
+        } catch {}
+      }
+    } else {
+      prevRoomIdRef.current = null;
+    }
+  }, [activeTogetherRoom?.roomId, activeTogetherRoom?.status, activeTogetherRoom?.hostUid, currentUser.id]);
 
   // Handle notification action deep links on initial load (e.g., ?action=chat, ?openReply=true)
   useEffect(() => {
@@ -201,8 +217,8 @@ export const Shell: React.FC = () => {
               : 'w-full flex-1 p-3 sm:p-5 lg:p-6 max-w-[1600px]'
           }`}
         >
-          {effectiveSession && activeTab !== 'together' && activeTab !== 'chat' && (
-            <div className="mb-4">
+          {effectiveSession && activeTab !== 'together' && (
+            <div className="mb-3 shrink-0">
               <ActiveSessionBanner
                 session={effectiveSession}
                 isInsideRoom={false}

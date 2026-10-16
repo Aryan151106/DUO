@@ -157,8 +157,8 @@ app.post('/api/livekit/create-room', async (req, res) => {
     }
 
     const coupleId = reqCoupleId || user.coupleId || 'couple-duo';
-    const roomId = requestedRoomId || `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    const roomName = requestedRoomName || `duo-${coupleId}-${roomId}`.toLowerCase();
+    const roomId = requestedRoomId || `${type}-${coupleId}`.toLowerCase();
+    const roomName = requestedRoomName || `duo-${coupleId}-${type}`.toLowerCase();
 
     // Authoritative LiveKit Cloud Token
     const { token, serverUrl } = await generateLiveKitToken({
@@ -176,11 +176,13 @@ app.post('/api/livekit/create-room', async (req, res) => {
           type,
           status: 'waiting',
           hostUid: user.uid,
+          hostName: user.displayName || 'Partner',
           memberUids: [user.uid],
           coupleId,
           roomName,
           serverUrl,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdMs: Date.now(),
           endedAt: null,
           revision: 1,
           study: type === 'study' ? {
@@ -226,9 +228,9 @@ app.post('/api/livekit/join-room', async (req, res) => {
     }
 
     const coupleId = reqCoupleId || user.coupleId || 'couple-duo';
-    let roomName = reqRoomName || `duo-${coupleId}-${roomId}`.toLowerCase();
-    let isHost = false;
     let type = reqType || (roomId.includes('movie') ? 'movie' : 'study');
+    let roomName = reqRoomName || `duo-${coupleId}-${type}`.toLowerCase();
+    let isHost = false;
 
     if (db) {
       try {
@@ -319,7 +321,8 @@ app.post('/api/livekit/token', async (req, res) => {
       return res.status(400).json({ error: 'Missing roomId' });
     }
 
-    let roomName = reqRoomName || `duo-${targetCoupleId}-${targetRoomId}`.toLowerCase();
+    let type = targetRoomId.includes('movie') ? 'movie' : 'study';
+    let roomName = reqRoomName || `duo-${targetCoupleId}-${type}`.toLowerCase();
     let hostFlag = isHost;
 
     if (db) {

@@ -218,14 +218,14 @@ export const TogetherSpace: React.FC = () => {
 
   return (
     <div className="w-full max-w-full lg:max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-4 pb-24 lg:pb-8 space-y-4 sm:space-y-6 min-w-0">
-      {/* Live Room Invitation / Active Session Banner */}
+      {/* Live Room Invitation / Active Session Banner (visible when on other sub-tabs) */}
       {effectiveSession && (
+        (effectiveSession.type === 'study' && togetherSubTab !== 'focus') ||
+        (effectiveSession.type === 'movie' && togetherSubTab !== 'movie')
+      ) && (
         <ActiveSessionBanner
           session={effectiveSession}
-          isInsideRoom={
-            (effectiveSession.type === 'study' && togetherSubTab === 'focus') ||
-            (effectiveSession.type === 'movie' && togetherSubTab === 'movie')
-          }
+          isInsideRoom={false}
           onJoin={(s) => {
             setTogetherSubTab(s.type === 'study' ? 'focus' : 'movie');
           }}
