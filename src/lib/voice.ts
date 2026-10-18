@@ -269,8 +269,17 @@ export class VoiceRecorderManager {
 
 export const voiceRecorder = new VoiceRecorderManager();
 
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read audio blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
- * Upload Voice Note Blob to Firebase Storage
+ * Upload Voice Note Blob to Firebase Storage with inline data fallback
  */
 export async function uploadVoiceNote(params: {
   spaceId: string;
@@ -285,7 +294,10 @@ export async function uploadVoiceNote(params: {
   const storagePath = `spaces/${spaceId}/chat/${messageId}/voice.${ext}`;
 
   if (!isCloudStorageAvailable()) {
-    throw new Error('Cloud Storage is unavailable. Voice note cannot be uploaded without active storage.');
+    console.warn('[VoiceUpload] Cloud storage unavailable, using inline audio');
+    const dataUrl = await blobToDataUrl(blob);
+    onProgress?.(100);
+    return { downloadUrl: dataUrl, storagePath: `inline/${messageId}` };
   }
 
   try {
@@ -298,11 +310,18 @@ export async function uploadVoiceNote(params: {
     });
 
     return await new Promise((resolve, reject) => {
-      // 60-second safety timeout for slow mobile uploads
-      const timer = setTimeout(() => {
+      // 6-second safety timeout before falling back to inline data URL
+      const timer = setTimeout(async () => {
         try { uploadTask.cancel(); } catch {}
-        reject(new Error('Voice note upload timed out. Please check your connection.'));
-      }, 60000);
+        try {
+          console.warn('[VoiceUpload] Storage timed out, falling back to inline audio');
+          const dataUrl = await blobToDataUrl(blob);
+          onProgress?.(100);
+          resolve({ downloadUrl: dataUrl, storagePath: `inline/${messageId}` });
+        } catch (fallbackErr) {
+          reject(fallbackErr);
+        }
+      }, 6000);
 
       uploadTask.on(
         'state_changed',
@@ -312,10 +331,16 @@ export async function uploadVoiceNote(params: {
             onProgress(pct);
           }
         },
-        (error) => {
+        async (error) => {
           clearTimeout(timer);
-          console.error('[VoiceUpload] Storage upload failed:', error);
-          reject(new Error(`Voice upload failed: ${error.message || 'Network error'}`));
+          console.warn('[VoiceUpload] Storage upload failed, falling back to inline audio:', error);
+          try {
+            const dataUrl = await blobToDataUrl(blob);
+            onProgress?.(100);
+            resolve({ downloadUrl: dataUrl, storagePath: `inline/${messageId}` });
+          } catch (fallbackErr) {
+            reject(fallbackErr);
+          }
         },
         async () => {
           clearTimeout(timer);
@@ -323,15 +348,23 @@ export async function uploadVoiceNote(params: {
             const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
             resolve({ downloadUrl, storagePath });
           } catch (err: any) {
-            console.error('[VoiceUpload] getDownloadURL failed:', err);
-            reject(new Error(`Failed to obtain voice note URL: ${err.message || 'Unknown error'}`));
+            console.warn('[VoiceUpload] getDownloadURL failed, falling back to inline audio:', err);
+            try {
+              const dataUrl = await blobToDataUrl(blob);
+              onProgress?.(100);
+              resolve({ downloadUrl: dataUrl, storagePath: `inline/${messageId}` });
+            } catch (fallbackErr) {
+              reject(fallbackErr);
+            }
           }
         }
       );
     });
   } catch (err: any) {
-    console.error('[VoiceUpload] Cloud Storage init failed:', err);
-    throw err;
+    console.warn('[VoiceUpload] Cloud Storage init failed, falling back to inline audio:', err);
+    const dataUrl = await blobToDataUrl(blob);
+    onProgress?.(100);
+    return { downloadUrl: dataUrl, storagePath: `inline/${messageId}` };
   }
 }
 

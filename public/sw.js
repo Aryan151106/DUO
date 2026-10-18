@@ -1,5 +1,5 @@
-// Top-level message handler registered synchronously on initial evaluation
-self.addEventListener('message', (event) => {
+// Top-level message handler registered safely
+const handleWorkerMessage = (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
@@ -18,7 +18,18 @@ self.addEventListener('message', (event) => {
       })()
     );
   }
-});
+};
+
+// Use onmessage property to avoid Chromium "Event handler of 'message' event must be added on initial evaluation" warning
+if ('onmessage' in self) {
+  const prevOnMsg = self.onmessage;
+  self.onmessage = (event) => {
+    if (typeof prevOnMsg === 'function') prevOnMsg(event);
+    handleWorkerMessage(event);
+  };
+} else {
+  self.addEventListener('message', handleWorkerMessage);
+}
 
 // Import OneSignal SDK worker synchronously
 try {
@@ -36,9 +47,6 @@ self.addEventListener('fetch', (event) => {
 });
 const CACHE_NAME = 'av-cache-v3';
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-});
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(

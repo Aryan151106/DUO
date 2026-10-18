@@ -108,6 +108,33 @@ export const CallOverlay: React.FC = () => {
     return () => unsubscribe();
   }, [couple?.id, currentUser?.id, startCall, partnerUser.displayName]);
 
+  // Clean up all tracks, streams, audio, and timers if CallOverlay unmounts
+  useEffect(() => {
+    return () => {
+      if (screenStreamRef.current) {
+        stopMediaStream(screenStreamRef.current);
+        screenStreamRef.current = null;
+      }
+      const store = useCallStore.getState();
+      if (store.localStream) {
+        stopMediaStream(store.localStream);
+        store.setLocalStream(null);
+      }
+      if (store.remoteStream) {
+        stopMediaStream(store.remoteStream);
+        store.setRemoteStream(null);
+      }
+      if (ringtoneStopRef.current) {
+        ringtoneStopRef.current();
+        ringtoneStopRef.current = null;
+      }
+      if (durationTimerRef.current) {
+        clearInterval(durationTimerRef.current);
+        durationTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // 1b. Deep-link handler for incoming call push clicks (?action=call&callId=...)
   useEffect(() => {
     if (typeof window === 'undefined') return;

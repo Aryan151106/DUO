@@ -434,7 +434,21 @@ export const sendPushNotification = onCall({
     throw new HttpsError("unauthenticated", "You must be signed in.");
   }
   const uid = request.auth.uid;
-  const { coupleId, targetUserId, title, body, type, deepLink, metadata } = request.data || {};
+  const {
+    coupleId,
+    targetUserId,
+    title,
+    body,
+    type,
+    deepLink,
+    metadata,
+    eventId,
+    correlationId: clientCorrelationId,
+  } = request.data || {};
+
+  const correlationId =
+    clientCorrelationId ||
+    `push-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   if (!coupleId || !targetUserId || !title) {
     throw new HttpsError("invalid-argument", "Missing required push notification parameters.");
@@ -450,12 +464,45 @@ export const sendPushNotification = onCall({
     throw new HttpsError("permission-denied", "Unauthorized push target or sender.");
   }
 
+  // Idempotency: return existing result if event was already dispatched recently
+  if (eventId) {
+    try {
+      const existingDoc = await db
+        .collection("couples")
+        .doc(coupleId)
+        .collection("pushEvents")
+        .doc(eventId)
+        .get();
+
+      if (existingDoc.exists) {
+        const existingData = existingDoc.data();
+        console.log(`[PushDispatcher] Idempotent hit for event ${eventId} (${correlationId})`);
+        return {
+          success: true,
+          requestAccepted: true,
+          notificationId: existingData?.notificationId || null,
+          recipients: existingData?.recipients || 1,
+          reason: "idempotent_duplicate",
+          correlationId,
+        };
+      }
+    } catch (idemErr) {
+      console.warn(`[PushDispatcher] Idempotency check notice (${correlationId}):`, idemErr);
+    }
+  }
+
   const oneSignalApiKey = getSecretVal(oneSignalRestApiKeySecret, "ONESIGNAL_REST_API_KEY");
-  const oneSignalAppId = process.env.ONESIGNAL_APP_ID || "fa8f0dbb-1361-4fa3-b1d7-2f3b95d038dc";
+  // Synchronized deliberate fallback App ID matching client configuration
+  const oneSignalAppId = process.env.ONESIGNAL_APP_ID || "e0bb43d0-355d-48de-bb9f-0caf33039abb";
 
   if (!oneSignalApiKey || !oneSignalAppId) {
-    console.warn("[OneSignal Server] ONESIGNAL_REST_API_KEY not configured in environment secrets.");
-    return { success: false, reason: "Server push secret not configured" };
+    console.warn("[OneSignal Server] Push server configuration incomplete: missing API key or App ID.");
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: "Server push configuration missing",
+      correlationId,
+    };
   }
 
   const cleanKey = oneSignalApiKey.trim();
@@ -485,30 +532,112 @@ export const sendPushNotification = onCall({
       senderId: uid,
       targetUserId,
       url: deepLink || "/",
+      eventId: eventId || null,
+      correlationId,
       ...(metadata || {}),
     },
   };
 
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), 8000);
+  const startTime = Date.now();
+  let resp: Response;
+
   try {
-    const resp = await fetch("https://api.onesignal.com/notifications", {
+    resp = await fetch("https://api.onesignal.com/notifications", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: authHeader,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
-
-    if (!resp.ok) {
-      console.warn("[OneSignal Server] HTTP status:", resp.status, await resp.text());
-      return { success: false, status: resp.status };
-    }
-
-    return { success: true };
   } catch (err: any) {
-    console.error("[OneSignal Server] Error sending push:", err.message);
-    return { success: false, error: err.message };
+    clearTimeout(timeoutTimer);
+    const latency = Date.now() - startTime;
+    const isTimeout = err?.name === "AbortError";
+    console.error(
+      `[PushDispatcher] Network error (${correlationId}): ${isTimeout ? "Timeout (8000ms)" : err?.message}, recipient: ${targetUserId}, type: ${type || "message"}, latency: ${latency}ms`
+    );
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: isTimeout ? "timeout" : "network_error",
+      correlationId,
+    };
+  } finally {
+    clearTimeout(timeoutTimer);
   }
+
+  const latency = Date.now() - startTime;
+  let responseData: any = null;
+  try {
+    responseData = await resp.json();
+  } catch {
+    responseData = null;
+  }
+
+  if (!resp.ok) {
+    console.warn(
+      `[PushDispatcher] OneSignal API HTTP ${resp.status} (${correlationId}): recipient: ${targetUserId}, type: ${type || "message"}, latency: ${latency}ms`
+    );
+    return {
+      success: false,
+      requestAccepted: false,
+      status: resp.status,
+      reason: "provider_error",
+      errors: responseData?.errors || null,
+      correlationId,
+    };
+  }
+
+  const notificationId = responseData?.id || null;
+  const recipients = typeof responseData?.recipients === "number" ? responseData.recipients : 0;
+  const hasNoRecipients = recipients === 0;
+
+  console.log(
+    `[PushDispatcher] Push dispatched (${correlationId}): recipient: ${targetUserId}, type: ${type || "message"}, onesignal_id: ${notificationId}, recipients: ${recipients}, latency: ${latency}ms`
+  );
+
+  if (hasNoRecipients) {
+    return {
+      success: false,
+      requestAccepted: true,
+      notificationId,
+      recipients: 0,
+      reason: "no_matching_subscription",
+      correlationId,
+    };
+  }
+
+  // Record idempotency record
+  if (eventId) {
+    db.collection("couples")
+      .doc(coupleId)
+      .collection("pushEvents")
+      .doc(eventId)
+      .set({
+        eventId,
+        targetUserId,
+        type: type || "message",
+        notificationId,
+        recipients,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+      .catch((writeErr) => {
+        console.warn(`[PushDispatcher] Push event recording notice (${correlationId}):`, writeErr);
+      });
+  }
+
+  return {
+    success: true,
+    requestAccepted: true,
+    notificationId,
+    recipients,
+    reason: "accepted",
+    correlationId,
+  };
 });
 
 /**

@@ -290,7 +290,8 @@ export const LiveKitMediaRoom: React.FC<LiveKitMediaRoomProps> = ({
         if (screenShareVideoRef.current) screenShareVideoRef.current.srcObject = null;
         if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
 
-        room.disconnect();
+        room.removeAllListeners();
+        room.disconnect(true);
       } catch (e) {
         console.warn('[LiveKit] Disconnect cleanup notice:', e);
       }

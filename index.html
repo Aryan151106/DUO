@@ -27,27 +27,8 @@
         } catch (e) {}
       })();
     </script>
-    <!-- OneSignal Web Push SDK -->
+    <!-- OneSignal Web Push SDK (deferred load; initialized authoritatively in src/lib/oneSignal.ts) -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
-    <script>
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      OneSignalDeferred.push(async function(OneSignal) {
-        var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        if (isLocal) {
-          console.info('[OneSignal] Localhost dev environment detected — push notifications active on https://av-space-311906.web.app');
-          return;
-        }
-        try {
-          await OneSignal.init({
-            appId: "e0bb43d0-355d-48de-bb9f-0caf33039abb",
-            allowLocalhostAsSecureOrigin: true,
-            notifyButton: { enable: false }
-          });
-        } catch (e) {
-          console.info('[OneSignal] Push notifications active on production domain: https://av-space-311906.web.app');
-        }
-      });
-    </script>
     <title>AV — Aryan & Vidhi</title>
   </head>
   <body class="bg-[var(--bg)] text-[var(--text)] font-body antialiased selection:bg-[var(--accent)] selection:text-[var(--text)] overflow-x-hidden">

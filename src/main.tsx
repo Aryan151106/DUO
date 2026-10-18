@@ -3,24 +3,15 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 
-// Ensure any registered Service Worker updates immediately to fresh deployment
-let refreshing = false;
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true;
-      window.location.reload();
-    }
-  });
-
+// Safely clean up any legacy competing OneSignal root-scope worker registration without reloading
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) {
-      registration.update();
-      if (registration.waiting) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    for (const reg of registrations) {
+      if (reg.active?.scriptURL?.includes('OneSignalSDKWorker.js')) {
+        reg.unregister().catch(() => {});
       }
     }
-  });
+  }).catch(() => {});
 }
 
 createRoot(document.getElementById('root')!).render(

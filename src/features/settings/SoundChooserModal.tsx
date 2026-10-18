@@ -132,6 +132,12 @@ export const SoundChooserModal: React.FC<SoundChooserModalProps> = ({
     e.stopPropagation();
     stopCurrent();
     const existing = soundEngine.getCustomSounds();
+    const target = existing.find((c) => c.id === customId);
+    if (target?.url && target.url.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(target.url);
+      } catch {}
+    }
     const updated = existing.filter((c) => c.id !== customId);
     soundEngine.setCustomSounds(updated);
     if (selectedSoundId === customId) {

@@ -235,13 +235,23 @@ export const AttachmentPreview: React.FC<AttachmentPreviewProps> = ({
               }`}
             >
               {activeVideoUrl === vid.url ? (
-                <video
-                  src={vid.url}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="w-full max-h-[300px] object-contain"
-                />
+                <div className="relative w-full">
+                  <video
+                    src={vid.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    className="w-full max-h-[300px] object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setActiveVideoUrl(null)}
+                    className="absolute top-2 right-2 p-1 rounded-full bg-black/60 hover:bg-black/80 text-white cursor-pointer z-10"
+                    title="Close video"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ) : (
                 <div
                   onClick={() => setActiveVideoUrl(vid.url)}

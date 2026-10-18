@@ -24,6 +24,7 @@ import { CallOverlay } from '../features/calls/CallOverlay';
 import { ReminderBanner } from '../features/calendar/ReminderBanner';
 import { TaskReminderBanner } from '../features/tasks/TaskReminderBanner';
 import { ActiveSessionBanner } from '../features/together/ActiveSessionBanner';
+import { PwaUpdatePrompt } from './PwaUpdatePrompt';
 import { useActiveSession } from '../lib/activitySessions';
 import { useAnyActiveTogetherRoom } from '../lib/togetherRooms';
 import {
@@ -301,6 +302,7 @@ export const Shell: React.FC = () => {
       <TaskReminderBanner />
       <NudgeAlarmOverlay />
       <CallOverlay />
+      <PwaUpdatePrompt />
     </div>
   );
 };

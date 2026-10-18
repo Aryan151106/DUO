@@ -4,7 +4,7 @@
  */
 import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import { app } from './firebase';
-import { isCloudStorageAvailable } from './storageService';
+import { isCloudStorageAvailable, blobToDataUrl } from './storageService';
 
 export type AttachmentType = 'image' | 'video' | 'document';
 
@@ -324,89 +324,129 @@ export async function uploadAttachment(
     } catch {}
   }
 
-  if (!isCloudStorageAvailable()) {
-    throw new Error('Cloud Storage is unavailable. Please check your connection and retry.');
-  }
+  // 1. Attempt Firebase Storage upload if configured
+  if (isCloudStorageAvailable()) {
+    try {
+      const storage = getStorage(app);
+      const storageRef = ref(storage, storagePath);
+      const uploadTask = uploadBytesResumable(storageRef, processedBlob, {
+        contentType: file.type || 'application/octet-stream',
+        cacheControl: 'public,max-age=31536000,immutable',
+      });
 
-  // Attempt Firebase Storage upload
-  try {
-    const storage = getStorage(app);
-    const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, processedBlob, {
-      contentType: file.type || 'application/octet-stream',
-      cacheControl: 'public,max-age=31536000,immutable',
-    });
+      const fileAttachment = await new Promise<FileAttachment>((resolve, reject) => {
+        // Fast 6-second timeout to fail fast if Firebase Cloud Storage bucket is unprovisioned
+        const timer = setTimeout(() => {
+          try { uploadTask.cancel(); } catch {}
+          reject(new Error('Storage upload timed out. Engaging inline media pipeline.'));
+        }, 6000);
 
-    const fileAttachment = await new Promise<FileAttachment>((resolve, reject) => {
-      // 60-second safety timeout for slow mobile uploads
-      const timer = setTimeout(() => {
-        try { uploadTask.cancel(); } catch {}
-        reject(new Error('Upload timed out after 60 seconds. Please check your connection.'));
-      }, 60000);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          if (snapshot.totalBytes > 0) {
-            const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-            options?.onProgress?.(progress);
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            if (snapshot.totalBytes > 0) {
+              const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+              options?.onProgress?.(progress);
+            }
+          },
+          (error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+          async () => {
+            clearTimeout(timer);
+            try {
+              const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              resolve({
+                id: fileId,
+                type,
+                path: storagePath,
+                url: downloadUrl,
+                fileName: sanitized,
+                mimeType: file.type || 'application/octet-stream',
+                size: processedBlob.size,
+                uploadedBy,
+                createdAt: new Date().toISOString(),
+              });
+            } catch (err: any) {
+              reject(err);
+            }
           }
-        },
-        (error) => {
-          clearTimeout(timer);
-          console.error('[Attachments] Firebase Storage upload failed:', error);
-          reject(new Error(`Storage upload failed: ${error.message || 'Network error'}`));
-        },
-        async () => {
-          clearTimeout(timer);
-          try {
-            const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve({
-              id: fileId,
-              type,
-              path: storagePath,
-              url: downloadUrl,
-              fileName: sanitized,
-              mimeType: file.type || 'application/octet-stream',
-              size: processedBlob.size,
-              uploadedBy,
-              createdAt: new Date().toISOString(),
-            });
-          } catch (err: any) {
-            console.error('[Attachments] getDownloadURL failed:', err);
-            reject(new Error(`Failed to obtain download URL: ${err.message || 'Unknown error'}`));
-          }
+        );
+      });
+
+      // Upload thumbnail blob if generated
+      if (thumbBlob) {
+        try {
+          const thumbRef = ref(storage, thumbnailPath);
+          await uploadBytesResumable(thumbRef, thumbBlob, {
+            contentType: 'image/jpeg',
+            cacheControl: 'public,max-age=31536000,immutable',
+          });
+          const thumbDownloadUrl = await getDownloadURL(thumbRef);
+          fileAttachment.thumbnailUrl = thumbDownloadUrl;
+          fileAttachment.thumbnailPath = thumbnailPath;
+        } catch (thumbErr) {
+          console.warn('[Attachments] Thumbnail upload warning:', thumbErr);
         }
-      );
-    });
-
-    // Upload thumbnail blob if generated
-    if (thumbBlob) {
-      try {
-        const thumbRef = ref(storage, thumbnailPath);
-        await uploadBytesResumable(thumbRef, thumbBlob, {
-          contentType: 'image/jpeg',
-          cacheControl: 'public,max-age=31536000,immutable',
-        });
-        const thumbDownloadUrl = await getDownloadURL(thumbRef);
-        fileAttachment.thumbnailUrl = thumbDownloadUrl;
-        fileAttachment.thumbnailPath = thumbnailPath;
-      } catch (thumbErr) {
-        console.warn('[Attachments] Thumbnail upload warning:', thumbErr);
       }
-    }
 
-    return fileAttachment;
-  } catch (err: any) {
-    console.error('[Attachments] Storage upload failed:', err);
-    throw (err instanceof Error ? err : new Error(String(err) || 'Attachment upload failed'));
+      return fileAttachment;
+    } catch (storageErr) {
+      console.warn('[Attachments] Cloud Storage bucket unprovisioned or unavailable, deploying inline media pipeline:', storageErr);
+    }
   }
+
+  // 2. High-speed Direct Inline Media Fallback (works with zero bucket configuration)
+  options?.onProgress?.(30);
+  let inlineBlob = processedBlob;
+  if (type === 'image') {
+    if (inlineBlob.size > 350 * 1024) {
+      try {
+        inlineBlob = await compressImage(file, 0.72, 1280);
+      } catch {}
+    }
+    if (inlineBlob.size > 400 * 1024) {
+      try {
+        inlineBlob = await compressImage(file, 0.62, 1024);
+      } catch {}
+    }
+  } else if (inlineBlob.size > 700 * 1024) {
+    throw new Error(
+      `Direct upload without Cloud Storage requires files under 700KB (current: ${(inlineBlob.size / 1024).toFixed(0)}KB). Please use a shorter clip or configure Firebase Cloud Storage.`
+    );
+  }
+
+  options?.onProgress?.(70);
+  const dataUrl = await blobToDataUrl(inlineBlob);
+  let thumbUrl: string | undefined = undefined;
+  if (thumbBlob) {
+    try {
+      thumbUrl = await blobToDataUrl(thumbBlob);
+    } catch {}
+  }
+
+  options?.onProgress?.(100);
+
+  return {
+    id: fileId,
+    type,
+    path: `inline/${fileId}`,
+    url: dataUrl,
+    thumbnailUrl: thumbUrl || (type === 'image' ? dataUrl : undefined),
+    fileName: sanitized,
+    mimeType: file.type || 'application/octet-stream',
+    size: inlineBlob.size,
+    uploadedBy,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 /**
  * Delete a stored file from Firebase Storage.
  */
 export async function deleteAttachmentFile(storagePath: string): Promise<void> {
+  if (storagePath.startsWith('inline/')) return;
   try {
     const storage = getStorage(app);
     const storageRef = ref(storage, storagePath);

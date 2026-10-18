@@ -8,48 +8,48 @@ let isInitialized = false;
 
 export interface OneSignalConfig {
   appId: string;
+  restApiKey?: string;
+}
+
+export interface SendPushResult {
+  success: boolean;
+  requestAccepted: boolean;
+  notificationId?: string | null;
+  recipients?: number;
+  reason?: string;
+  correlationId?: string;
 }
 
 export function getOneSignalConfig(): OneSignalConfig {
-  const envAppId = import.meta.env.VITE_ONESIGNAL_APP_ID || '';
-  const localAppId = typeof window !== 'undefined' ? localStorage.getItem('duo_onesignal_app_id') || '' : '';
-  const appId = (envAppId || localAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
+  const envAppId = (import.meta.env.VITE_ONESIGNAL_APP_ID || '').trim();
+  const envApiKey = (import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '').trim();
+  const localApiKey = typeof window !== 'undefined' ? (localStorage.getItem('duo_onesignal_api_key') || '').trim() : '';
 
-  // Actively purge any legacy exposed REST API key from client storage
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('duo_onesignal_api_key');
-    } catch {
-      // Ignore storage errors in restricted contexts
-    }
-  }
+  // Authoritative production App ID synchronized between client and backend
+  const appId = envAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb';
+  const restApiKey = envApiKey || localApiKey || '';
 
-  return { appId };
+  return { appId, restApiKey };
 }
 
-export function saveOneSignalConfig(appId: string) {
-  if (typeof window !== 'undefined') {
-    if (appId) {
-      localStorage.setItem('duo_onesignal_app_id', appId.trim());
+export function saveOneSignalConfig(_appId?: string, apiKey?: string) {
+  if (typeof window !== 'undefined' && apiKey !== undefined) {
+    if (apiKey) {
+      localStorage.setItem('duo_onesignal_api_key', apiKey.trim());
     } else {
-      localStorage.removeItem('duo_onesignal_app_id');
-    }
-
-    try {
       localStorage.removeItem('duo_onesignal_api_key');
-    } catch {
-      // Ignore storage errors
     }
   }
 }
 
 /**
- * Initialize OneSignal and bind current user's Firebase UID as external_id
+ * Initialize OneSignal authoritatively and bind current user's Firebase UID as external_id.
+ * Configured with serviceWorkerPath: 'sw.js' to unify PWA caching and OneSignal push into one worker.
  */
 export async function initOneSignal(userId?: string): Promise<boolean> {
   const { appId } = getOneSignalConfig();
   if (!appId) {
-    console.log('[OneSignal] No App ID configured yet. Skipping initialization.');
+    console.warn('[OneSignal] No App ID configured. Skipping initialization.');
     return false;
   }
 
@@ -60,9 +60,18 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
     return false;
   }
 
+  if (isInitialized) {
+    if (userId) {
+      await bindOneSignalUser(userId);
+    }
+    return true;
+  }
+
   if (initPromise) {
     if (userId) {
-      void initPromise.then(() => bindOneSignalUser(userId));
+      void initPromise.then((ok) => {
+        if (ok) void bindOneSignalUser(userId);
+      });
     }
     return initPromise;
   }
@@ -71,17 +80,25 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
     try {
       const win = window as any;
 
-      if (!isInitialized) {
-        try {
-          await OneSignal.init({
-            appId,
-            allowLocalhostAsSecureOrigin: true,
-            notifyButton: { enable: false } as any,
-          });
+      try {
+        await OneSignal.init({
+          appId,
+          serviceWorkerPath: 'sw.js',
+          serviceWorkerParam: { scope: '/' },
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: { enable: false } as any,
+        });
+        isInitialized = true;
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        if (errMsg.toLowerCase().includes('already initialized') || win.OneSignal?.initialized) {
+          console.info('[OneSignal] OneSignal SDK already initialized.');
           isInitialized = true;
-        } catch {
-          // May already be initialized via index.html or script
-          isInitialized = true;
+        } else {
+          console.error('[OneSignal] OneSignal.init() failed with error:', err);
+          isInitialized = false;
+          initPromise = null; // Allow subsequent retry on genuine failure
+          return false;
         }
       }
 
@@ -97,8 +114,8 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
             }
           });
         }
-      } catch {
-        // Notification listener notice
+      } catch (e) {
+        console.warn('[OneSignal] Notification click listener notice:', e);
       }
 
       if (userId) {
@@ -107,7 +124,9 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
 
       return true;
     } catch (error) {
-      console.warn('[OneSignal] Initialization notice:', error);
+      console.error('[OneSignal] Initialization error:', error);
+      isInitialized = false;
+      initPromise = null; // Allow retry on failure
       return false;
     }
   })();
@@ -125,12 +144,11 @@ async function bindOneSignalUser(userId: string) {
     }
     console.log('[OneSignal] User subscription successfully linked');
 
-    // If permission is already granted in the browser, ensure OneSignal push subscription is opted in
+    // If browser permission is already granted, verify push subscription opt-in
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      if (win.OneSignal?.User?.PushSubscription?.optIn) {
-        await win.OneSignal.User.PushSubscription.optIn();
-      } else if (OneSignal.User?.PushSubscription?.optIn) {
-        await OneSignal.User.PushSubscription.optIn();
+      const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
+      if (sub && !sub.optedIn && sub.optIn) {
+        await sub.optIn();
       }
     }
   } catch (e) {
@@ -139,23 +157,21 @@ async function bindOneSignalUser(userId: string) {
 }
 
 /**
- * Check if the current client is opted in and subscribed to OneSignal Web Push
+ * Check if the current client is opted in and subscribed to OneSignal Web Push.
+ * Verifies OneSignal's actual PushSubscription state, not just browser permission.
  */
 export function isOneSignalSubscribed(): boolean {
   if (typeof window === 'undefined') return false;
   const win = window as any;
-  return Boolean(
-    win.OneSignal?.User?.PushSubscription?.optedIn ||
-    (typeof Notification !== 'undefined' && Notification.permission === 'granted')
-  );
+  const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
+  return Boolean(sub?.optedIn && sub?.id);
 }
 
 /**
- * Request system push notification permission via OneSignal
+ * Request system push notification permission via OneSignal tied to a user gesture.
  */
 export async function requestOneSignalPermission(userId?: string): Promise<boolean> {
   try {
-    // 1. Direct native browser prompt if available
     let nativePerm: NotificationPermission = 'default';
     if (typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'default') {
@@ -195,10 +211,9 @@ export async function requestOneSignalPermission(userId?: string): Promise<boole
 
     if (isGranted) {
       try {
-        if (win.OneSignal?.User?.PushSubscription?.optIn) {
-          await win.OneSignal.User.PushSubscription.optIn();
-        } else if (OneSignal.User?.PushSubscription?.optIn) {
-          await OneSignal.User.PushSubscription.optIn();
+        const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
+        if (sub?.optIn) {
+          await sub.optIn();
         }
         if (userId) {
           if (win.OneSignal?.login) {
@@ -220,9 +235,169 @@ export async function requestOneSignalPermission(userId?: string): Promise<boole
 }
 
 /**
+ * Direct client REST dispatch fallback when backend Cloud Functions are undeployed
+ * (e.g. Firebase Spark free plan). Delivers push notifications directly to partner.
+ */
+async function sendDirectOneSignalPush(params: {
+  coupleId?: string;
+  targetUserId: string;
+  title: string;
+  body: string;
+  type?: string;
+  deepLink?: string;
+  metadata?: Record<string, any>;
+  correlationId: string;
+}): Promise<SendPushResult> {
+  const { coupleId, targetUserId, title, body, type, deepLink, metadata, correlationId } = params;
+  const { appId, restApiKey } = getOneSignalConfig();
+
+  if (!appId || !restApiKey) {
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: 'missing_onesignal_credentials',
+      correlationId,
+    };
+  }
+
+  const origin =
+    typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : 'https://av-space-311906.web.app';
+
+  const cleanKey = restApiKey.trim();
+  const authHeader =
+    cleanKey.startsWith('Key ') || cleanKey.startsWith('Basic ')
+      ? cleanKey
+      : cleanKey.startsWith('os_v2_app_')
+      ? `Key ${cleanKey}`
+      : `Basic ${cleanKey}`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': authHeader,
+  };
+
+  const url = deepLink || (type === 'message' ? `${origin}/?action=chat` : origin);
+  const payload: Record<string, any> = {
+    app_id: appId,
+    include_aliases: {
+      external_id: [targetUserId],
+    },
+    target_channel: 'push',
+    headings: { en: title },
+    contents: { en: body },
+    chrome_web_icon: `${origin}/pwa-192x192.png`,
+    chrome_web_badge: `${origin}/logo.svg`,
+    priority: 10,
+    android_priority: 10,
+    delayed_option: 'immediate',
+    ttl: type === 'call' ? 120 : 86400,
+    android_visibility: 1,
+    android_accent_color: 'FF4D6D',
+    url,
+    data: {
+      type: type || 'message',
+      targetUserId,
+      coupleId,
+      openReply: true,
+      ...(metadata || {}),
+    },
+    web_buttons: [
+      { id: 'reply', text: 'Reply 💬', icon: '', url: `${origin}/?action=chat&openReply=true` },
+      { id: 'open', text: 'Open Duo ❤️', icon: '', url: `${origin}/?action=chat` },
+    ],
+  };
+
+  try {
+    let res: Response;
+    try {
+      res = await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      res = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      });
+    }
+
+    if (res.ok) {
+      const data = await res.json();
+      console.log(`[OneSignal] Direct push accepted (ID: ${data?.id || 'unknown'}, correlation: ${correlationId})`);
+      return {
+        success: true,
+        requestAccepted: true,
+        notificationId: data?.id || null,
+        recipients: data?.recipients ?? 1,
+        reason: 'direct_rest_accepted',
+        correlationId,
+      };
+    }
+
+    // Fallback attempt with legacy include_external_user_ids
+    const legacyPayload = {
+      ...payload,
+      include_aliases: undefined,
+      target_channel: undefined,
+      include_external_user_ids: [targetUserId],
+      channel_for_external_user_ids: 'push',
+    };
+
+    let legacyRes: Response;
+    try {
+      legacyRes = await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(legacyPayload),
+      });
+    } catch {
+      legacyRes = await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(legacyPayload),
+      });
+    }
+
+    if (legacyRes.ok) {
+      const data = await legacyRes.json();
+      console.log(`[OneSignal] Direct push legacy accepted (ID: ${data?.id || 'unknown'})`);
+      return {
+        success: true,
+        requestAccepted: true,
+        notificationId: data?.id || null,
+        recipients: data?.recipients ?? 1,
+        reason: 'direct_legacy_accepted',
+        correlationId,
+      };
+    }
+
+    const errText = await legacyRes.text();
+    console.warn(`[OneSignal] Direct push rejected (${legacyRes.status}):`, errText);
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: `http_${legacyRes.status}`,
+      correlationId,
+    };
+  } catch (err: any) {
+    console.error(`[OneSignal] Direct push network error:`, err);
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: err?.message || 'network_error',
+      correlationId,
+    };
+  }
+}
+
+/**
  * Dispatch an OS-level Push Notification directly to partner's device via OneSignal.
- * Delegates to the secure sendPushNotification Cloud Function on the backend.
- * Never exposes REST API keys or credentials in client bundles or network requests.
+ * Delegates to the Cloud Function when deployed, with immediate direct REST API fallback
+ * for zero-setup Spark plan compatibility.
  */
 export async function sendOneSignalPush(params: {
   coupleId?: string;
@@ -232,19 +407,33 @@ export async function sendOneSignalPush(params: {
   type?: string;
   deepLink?: string;
   metadata?: Record<string, any>;
-}): Promise<boolean> {
-  const { targetUserId, title, body, type, deepLink, metadata } = params;
+  eventId?: string;
+}): Promise<SendPushResult> {
+  const { targetUserId, title, body, type, deepLink, metadata, eventId } = params;
   const coupleId = params.coupleId || useAuthStore.getState().couple?.id;
+  const correlationId = `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   if (!targetUserId) {
-    return false;
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: 'missing_target_user_id',
+      correlationId,
+    };
   }
 
   if (!coupleId) {
     console.warn('[OneSignal] Cannot dispatch push: coupleId is not available.');
-    return false;
+    return {
+      success: false,
+      requestAccepted: false,
+      reason: 'missing_couple_id',
+      correlationId,
+    };
   }
 
+  const startTime = Date.now();
+  // 1. Attempt Cloud Function dispatch
   try {
     const sendPushFn = httpsCallable<
       {
@@ -255,8 +444,17 @@ export async function sendOneSignalPush(params: {
         type?: string;
         deepLink?: string;
         metadata?: Record<string, any>;
+        eventId?: string;
+        correlationId?: string;
       },
-      { success: boolean; reason?: string; error?: string }
+      {
+        success: boolean;
+        requestAccepted?: boolean;
+        notificationId?: string | null;
+        recipients?: number;
+        reason?: string;
+        correlationId?: string;
+      }
     >(functions, 'sendPushNotification');
 
     const response = await sendPushFn({
@@ -267,20 +465,40 @@ export async function sendOneSignalPush(params: {
       type: type || 'message',
       deepLink: deepLink || '/',
       metadata,
+      eventId,
+      correlationId,
     });
 
-    if (response.data && response.data.success) {
-      console.log('[OneSignal] Push successfully sent to partner via secure Cloud Function');
-      return true;
-    }
+    const resData = response.data;
+    const latency = Date.now() - startTime;
 
-    if (response.data?.reason) {
-      console.warn('[OneSignal] Push dispatch status:', response.data.reason);
+    if (resData?.requestAccepted) {
+      console.log(
+        `[OneSignal] Push request accepted via Cloud Function (ID: ${resData.notificationId || 'unknown'}, recipients: ${resData.recipients ?? 0}, latency: ${latency}ms)`
+      );
+      return {
+        success: Boolean(resData.success),
+        requestAccepted: true,
+        notificationId: resData.notificationId,
+        recipients: resData.recipients,
+        reason: resData.reason || 'accepted',
+        correlationId,
+      };
     }
-    return false;
   } catch (error: any) {
-    console.warn('[OneSignal] Failed to send push via Cloud Function:', error?.message || error);
-    return false;
+    const latency = Date.now() - startTime;
+    console.info(`[OneSignal] Cloud Function unavailable (${latency}ms: ${error?.message || error}), falling back to direct REST API.`);
   }
-}
 
+  // 2. Direct REST API Fallback
+  return sendDirectOneSignalPush({
+    coupleId,
+    targetUserId,
+    title,
+    body,
+    type,
+    deepLink,
+    metadata,
+    correlationId,
+  });
+}

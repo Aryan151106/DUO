@@ -270,10 +270,31 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
 
                 // 2. Play subtle sound & vibrate if appropriate
                 // Foreground in-app audio feedback is played cleanly.
-                // OS-level background notifications are handled exclusively by OneSignal.
                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
                   try {
                     navigator.vibrate(item.type === 'call' ? [500, 200, 500, 200, 500] : [200, 100, 200]);
+                  } catch {}
+                }
+
+                // 3. If tab is in background or unfocused, trigger notification banner if permitted
+                if (
+                  typeof document !== 'undefined' &&
+                  document.visibilityState !== 'visible' &&
+                  typeof Notification !== 'undefined' &&
+                  Notification.permission === 'granted'
+                ) {
+                  try {
+                    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+                      navigator.serviceWorker.ready.then((reg) => {
+                        reg.showNotification(item.title || 'AV', {
+                          body: item.body || 'New update from your partner.',
+                          icon: '/pwa-192x192.png',
+                          badge: '/favicon.svg',
+                          tag: `av-${item.type}-${change.doc.id}`,
+                          data: { url: item.deepLink || '/' },
+                        }).catch(() => {});
+                      }).catch(() => {});
+                    }
                   } catch {}
                 }
               }
@@ -433,6 +454,7 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
 
     sendNotification: async (params) => {
       const { coupleId, senderId, senderName, type, title, body, deepLink, metadata } = params;
+      const notifDocId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
       // 1. INSTANT DISPATCH VIA ONESIGNAL (0ms DELAY - NON-BLOCKING)
       try {
@@ -444,13 +466,15 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
           (authState.couple as any)?.members?.find((m: string) => m !== senderId);
 
         if (targetUserId && targetUserId !== senderId) {
-          sendOneSignalPush({
+          void sendOneSignalPush({
+            coupleId,
             targetUserId,
             title,
             body: body || `${senderName} sent you a ${type}`,
             type,
             deepLink,
             metadata,
+            eventId: notifDocId,
           }).catch((err) => {
             console.warn('[OneSignal] Push dispatch notice:', err);
           });
@@ -462,7 +486,6 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
       // 2. Persist in-app notification record in Firestore (Non-blocking background write)
       if (coupleId && !useAuthStore.getState().isDemoMode) {
         try {
-          const notifDocId = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
           const notifRef = doc(db, 'couples', coupleId, 'notifications', notifDocId);
 
           setDoc(notifRef, {

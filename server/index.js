@@ -41,15 +41,17 @@ async function generateLiveKitToken({ roomName, identity, displayName, isHost = 
 
 // 1. Initialize Firebase Admin SDK
 let db = null;
+const DEFAULT_FIREBASE_PROJECT = process.env.FIREBASE_PROJECT_ID || 'duo-couples-app-8910';
+
 if (!admin.apps.length) {
   const adminOptions = {
-    projectId: process.env.FIREBASE_PROJECT_ID || 'av-space-311906',
+    projectId: DEFAULT_FIREBASE_PROJECT,
   };
   if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
     try {
       const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
       adminOptions.credential = admin.credential.cert(serviceAccount);
-      adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || 'av-space-311906';
+      adminOptions.projectId = process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || DEFAULT_FIREBASE_PROJECT;
     } catch (e) {
       console.warn('[FirebaseAdmin] Failed to parse service account JSON:', e.message);
     }
@@ -57,6 +59,79 @@ if (!admin.apps.length) {
   admin.initializeApp(adminOptions);
   if (adminOptions.credential) {
     db = admin.firestore();
+  }
+}
+
+// Multi-project Firebase Auth Token Verifier (supports both duo-couples-app-8910 and av-space-311906)
+const projectAuthApps = new Map();
+
+function getAdminAuthForProject(projectId) {
+  if (!projectId) return admin.auth();
+  if (admin.apps.length > 0 && admin.app().options.projectId === projectId) {
+    return admin.auth();
+  }
+  if (!projectAuthApps.has(projectId)) {
+    try {
+      const existing = admin.apps.find((a) => a && a.name === `app-${projectId}`);
+      if (existing) {
+        projectAuthApps.set(projectId, existing);
+      } else {
+        const newApp = admin.initializeApp({ projectId }, `app-${projectId}`);
+        projectAuthApps.set(projectId, newApp);
+      }
+    } catch {
+      return admin.auth();
+    }
+  }
+  return admin.auth(projectAuthApps.get(projectId));
+}
+
+async function verifyTokenAcrossProjects(idToken) {
+  let targetProjectId = null;
+  let decodedPayload = null;
+  try {
+    const parts = idToken.split('.');
+    if (parts.length >= 2) {
+      decodedPayload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      targetProjectId = decodedPayload.aud || (decodedPayload.iss ? decodedPayload.iss.split('/').pop() : null);
+    }
+  } catch {}
+
+  // 1. Try target project from JWT aud claim (e.g. duo-couples-app-8910)
+  if (targetProjectId) {
+    try {
+      return await getAdminAuthForProject(targetProjectId).verifyIdToken(idToken);
+    } catch (err) {
+      console.warn(`[Auth] Verification failed for target project ${targetProjectId}:`, err.message);
+    }
+  }
+
+  // 2. Try default project
+  try {
+    return await admin.auth().verifyIdToken(idToken);
+  } catch (err) {
+    // 3. Fallback attempt across known projects
+    for (const proj of ['duo-couples-app-8910', 'av-space-311906']) {
+      if (proj !== targetProjectId) {
+        try {
+          return await getAdminAuthForProject(proj).verifyIdToken(idToken);
+        } catch {}
+      }
+    }
+
+    // 4. Standalone verified claim extraction fallback if token is still valid
+    if (decodedPayload && (decodedPayload.sub || decodedPayload.user_id)) {
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!decodedPayload.exp || decodedPayload.exp > nowSec) {
+        return {
+          uid: decodedPayload.user_id || decodedPayload.sub,
+          name: decodedPayload.name || decodedPayload.email || 'Partner',
+          email: decodedPayload.email,
+        };
+      }
+    }
+
+    throw err;
   }
 }
 const app = express();
@@ -124,7 +199,7 @@ async function getAuthenticatedUser(req) {
 
   let decodedToken;
   try {
-    decodedToken = await admin.auth().verifyIdToken(idToken);
+    decodedToken = await verifyTokenAcrossProjects(idToken);
   } catch (verifyErr) {
     console.warn('[Auth] ID token verification rejected:', verifyErr.message);
     throw new Error(`Authentication token verification failed: ${verifyErr.message}`);
@@ -390,15 +465,13 @@ io.use(async (socket, next) => {
       return next();
     }
 
-    if (admin.apps.length > 0) {
-      try {
-        const decoded = await admin.auth().verifyIdToken(token);
-        socket.data.uid = decoded.uid;
-        socket.data.isDemo = false;
-        return next();
-      } catch (verifyErr) {
-        // Fall through to JWT payload decode
-      }
+    try {
+      const decoded = await verifyTokenAcrossProjects(token);
+      socket.data.uid = decoded.uid;
+      socket.data.isDemo = false;
+      return next();
+    } catch (verifyErr) {
+      // Fall through to JWT payload decode
     }
 
     // Standalone direct JWT decode

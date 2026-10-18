@@ -14,7 +14,6 @@ import { InstallAppModal } from '../../components/InstallAppModal';
 import { useNotificationStore } from '../../lib/notifications';
 import {
   getOneSignalConfig,
-  saveOneSignalConfig,
   sendOneSignalPush,
 } from '../../lib/oneSignal';
 import {
@@ -125,8 +124,6 @@ export const SettingsModal: React.FC = () => {
   }, [currentUser?.id]);
 
   // OneSignal Free Push state
-  const [oneSignalAppId, setOneSignalAppId] = useState(() => getOneSignalConfig().appId);
-  const [oneSignalSaved, setOneSignalSaved] = useState(false);
   const [oneSignalTesting, setOneSignalTesting] = useState(false);
   const [oneSignalTestResult, setOneSignalTestResult] = useState<string | null>(null);
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
@@ -225,6 +222,9 @@ export const SettingsModal: React.FC = () => {
     a.href = url;
     a.download = `duo-our-journey-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
   };
 
   const openDedicatedPopout = () => {
@@ -653,14 +653,20 @@ export const SettingsModal: React.FC = () => {
                     setOneSignalTestResult('Vidhi / Aryan not connected yet');
                     return;
                   }
-                  const ok = await sendOneSignalPush({
+                  const res = await sendOneSignalPush({
                     coupleId: couple?.id,
                     targetUserId: targetId,
                     title: 'AV Signal Test',
                     body: `${currentUser.displayName || 'Aryan'} sent a test background push!`,
                     type: 'message',
                   });
-                  setOneSignalTestResult(ok ? 'Test Push Delivered! ✓' : 'Push sent (if subscribed, device will alert)');
+                  setOneSignalTestResult(
+                    res.requestAccepted
+                      ? (res.recipients && res.recipients > 0
+                          ? 'Request accepted by OneSignal (targeted active device) ✓'
+                          : 'Request accepted by OneSignal (no active subscriber device linked)')
+                      : `Push request not accepted: ${res.reason || 'check configuration'}`
+                  );
                 } finally {
                   setOneSignalTesting(false);
                 }
@@ -677,32 +683,21 @@ export const SettingsModal: React.FC = () => {
             </span>
           )}
 
-          {/* Advanced developer override */}
+          {/* Synchronized configuration info */}
           <details className="text-[11px] text-[var(--text-muted)] pt-1">
             <summary className="cursor-pointer hover:text-[var(--text)] font-semibold select-none">
-              Developer Settings (Custom OneSignal App ID)
+              Push Diagnostics & App Configuration
             </summary>
             <div className="mt-3 space-y-2 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
               <div>
-                <label className="block mb-1 font-bold">Custom App ID</label>
-                <input
-                  type="text"
-                  value={oneSignalAppId}
-                  onChange={(e) => setOneSignalAppId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px]"
-                />
+                <label className="block mb-1 font-bold">Synchronized OneSignal App ID</label>
+                <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text-muted)] truncate select-all">
+                  {getOneSignalConfig().appId}
+                </div>
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Active production App ID synchronized between client PWA and Firebase Cloud Functions.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  saveOneSignalConfig(oneSignalAppId);
-                  setOneSignalSaved(true);
-                  setTimeout(() => setOneSignalSaved(false), 2000);
-                }}
-                className="px-3 py-1 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-bold text-[11px] cursor-pointer"
-              >
-                {oneSignalSaved ? 'Updated ✓' : 'Save Custom App ID'}
-              </button>
             </div>
           </details>
         </div>

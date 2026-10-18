@@ -44,8 +44,25 @@
           ]
         },
         {
-          "source": "/(index.html|sw.js|registerSW.js|OneSignalSDKWorker.js)",
+          "source": "/(index.html|sw.js|sw-custom.js|registerSW.js|OneSignalSDKWorker.js)",
           "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/@(sw.js|sw-custom.js|OneSignalSDKWorker.js|registerSW.js)",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "key": "Service-Worker-Allowed",
+              "value": "/"
+            },
             {
               "key": "Cache-Control",
               "value": "no-cache, no-store, must-revalidate"
@@ -79,8 +96,25 @@
           ]
         },
         {
-          "source": "/(index.html|sw.js|registerSW.js|OneSignalSDKWorker.js)",
+          "source": "/(index.html|sw.js|sw-custom.js|registerSW.js|OneSignalSDKWorker.js)",
           "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        },
+        {
+          "source": "/@(sw.js|sw-custom.js|OneSignalSDKWorker.js|registerSW.js)",
+          "headers": [
+            {
+              "key": "Content-Type",
+              "value": "application/javascript; charset=utf-8"
+            },
+            {
+              "key": "Service-Worker-Allowed",
+              "value": "/"
+            },
             {
               "key": "Cache-Control",
               "value": "no-cache, no-store, must-revalidate"

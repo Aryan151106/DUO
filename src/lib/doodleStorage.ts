@@ -184,8 +184,18 @@ export async function uploadDoodle(params: {
   const thumbPath = `spaces/${spaceId}/doodles/${doodleId}_thumb.webp`;
   const strokePath = `spaces/${spaceId}/doodles/${doodleId}_strokes.json`;
 
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read image blob'));
+    reader.readAsDataURL(blob);
+  });
+}
+
   let imageUrl = '';
   let thumbnailUrl = '';
+  let usedPath = fullPath;
 
   if (isCloudStorageAvailable()) {
     try {
@@ -200,7 +210,7 @@ export async function uploadDoodle(params: {
         const timer = setTimeout(() => {
           try { uploadTask.cancel(); } catch {}
           reject(new Error('Storage upload timeout'));
-        }, 3000);
+        }, 5000);
 
         uploadTask.on(
           'state_changed',
@@ -234,11 +244,14 @@ export async function uploadDoodle(params: {
       imageUrl = urls[0];
       thumbnailUrl = urls[1];
     } catch (storageErr: any) {
-      console.error('[DoodleStorage] Cloud storage upload failed:', storageErr);
-      throw (storageErr instanceof Error ? storageErr : new Error('Drawing upload failed. Please tap Retry.'));
+      console.warn('[DoodleStorage] Cloud storage upload failed, falling back to inline data URL:', storageErr);
     }
-  } else {
-    throw new Error('Cloud Storage is unavailable. Could not save drawing to server.');
+  }
+
+  if (!imageUrl) {
+    imageUrl = await blobToDataUrl(fullBlob);
+    thumbnailUrl = await blobToDataUrl(thumbBlob);
+    usedPath = `inline/${doodleId}`;
   }
 
   // 4. Save metadata document in Firestore at couples/{spaceId}/doodles/{doodleId}
@@ -247,7 +260,7 @@ export async function uploadDoodle(params: {
     id: doodleId,
     createdBy: userId,
     createdAt: serverTimestamp(),
-    path: fullPath,
+    path: usedPath,
     imageUrl,
     thumbnailUrl,
     width,
@@ -288,7 +301,7 @@ export async function uploadDoodle(params: {
     name: caption || 'Shared Doodle',
     url: imageUrl,
     thumbnailUrl: thumbnailUrl || imageUrl,
-    path: fullPath,
+    path: usedPath,
     createdAt: new Date().toISOString(),
     timestamp: Date.now(),
     source: 'doodle',
