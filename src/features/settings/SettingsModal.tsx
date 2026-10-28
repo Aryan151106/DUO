@@ -248,6 +248,8 @@ export const SettingsModal: React.FC = () => {
           setOneSignalTestResult(`✓ Push alert sent to ${partnerName}'s phone via OneSignal!`);
         } else if (res.reason === 'realtime_synced') {
           setOneSignalTestResult(`✓ Real-time alert dispatched to ${partnerName}!`);
+        } else if (res.reason === 'demo_synced') {
+          setOneSignalTestResult(`✓ Demo alert simulated for ${partnerName}!`);
         } else {
           setOneSignalTestResult(`✓ Alert dispatched to ${partnerName} successfully!`);
         }
