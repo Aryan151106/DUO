@@ -7,19 +7,8 @@ import { TaskCard } from './TaskCard';
 import { CreateTaskModal } from './CreateTaskModal';
 import { TaskReminderBanner } from './TaskReminderBanner';
 import { getTimezoneDifference, isInQuietHours } from '../../lib/time';
-import {
-  Plus,
-  CheckCircle2,
-  Calendar as CalendarIcon,
-  ArrowRight,
-  Sunrise,
-  Sun,
-  Sunset,
-  Moon,
-  Clock,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+import { GoogleIcon } from '../../components/GoogleIcon';
+import { Sunrise, Sun, Sunset, Moon, Sparkles, Clock } from 'lucide-react';
 import { useCalendarEvents } from '../../lib/firestore';
 import { useTaskStore } from '../../lib/tasksStore';
 import { useNow, useMinuteNow } from '../../lib/useNow';
@@ -34,6 +23,7 @@ import {
 import { checkAndFireDueTaskReminders } from '../../lib/taskReminders';
 import { soundEffects } from '../../lib/sound';
 import { formatFriendlyDate, formatUpcomingDate } from '../../lib/format';
+import { WavyText } from '../../components/WavyHeading';
 
 interface ClockTileProps {
   displayName: string;
@@ -95,44 +85,39 @@ const ClockTile: React.FC<ClockTileProps> = ({
   }, [timeZone]);
 
   return (
-    <div className="clock-tile card p-3.5 sm:p-4 flex flex-col items-center text-center min-w-0">
-      {/* 1. Avatar (56px) with day/night icon badge */}
-      <div className="relative mb-2 shrink-0">
+    <div className={`clk ${!isCurrentUser ? 'v' : ''} flex flex-col items-center text-center min-w-0`}>
+      {/* 1. Avatar (62px) with day/night icon badge */}
+      <div className="av relative shrink-0">
         <img
           src={avatarUrl}
           alt={displayName}
-          className={`w-14 h-14 rounded-2xl object-cover border-2 shadow-xs ${
-            isCurrentUser ? 'border-[var(--partner-a)]' : 'border-[var(--partner-b)]'
-          }`}
+          className="w-full h-full rounded-full object-cover"
         />
-        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center text-[11px] shadow-xs">
+        <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[var(--card)] border border-[var(--ink)] flex items-center justify-center text-[11px] shadow-xs">
           {isDay ? '☀️' : '🌙'}
         </div>
       </div>
 
       {/* 2. Name: no truncation, allow wrap to two lines */}
-      <div className="font-chunky text-sm font-bold text-[var(--text)] leading-tight mb-1 break-words w-full">
+      <div className="font-heading text-sm font-normal leading-tight mb-1 break-words w-full text-[var(--text)]">
         {isCurrentUser ? `You (${displayName})` : displayName}
       </div>
 
       {/* 3. Time on ONE line with white-space: nowrap */}
-      <div
-        className="font-numeric font-bold text-[var(--text)] whitespace-nowrap tabular-nums my-0.5"
-        style={{ fontSize: 'clamp(1.25rem, 2.2vw, 1.75rem)' }}
-      >
+      <b className="ck font-heading text-[28px] sm:text-[30px] font-normal leading-tight my-0.5 whitespace-nowrap">
         <span>{timeParts.main}</span>
-        <span className="clock-seconds">{timeParts.seconds}</span>
+        <span className="text-[0.6em] ml-0.5 opacity-80">{timeParts.seconds}</span>
         {timeParts.period && (
-          <span className="text-[0.65em] font-ui font-semibold ml-1 text-[var(--text-muted)]">
+          <span className="text-[0.55em] font-ui font-semibold ml-1 opacity-90">
             {timeParts.period}
           </span>
         )}
-      </div>
+      </b>
 
       {/* 4. Date and timezone as small muted text */}
-      <div className="font-ui text-xs text-[var(--text-muted)] mt-0.5 truncate w-full">
-        <span>{formatFriendlyDate(now, now)}</span> • <span>{tzShort}</span>
-      </div>
+      <small className="opacity-80 block truncate w-full font-ui text-[12px] mt-0.5">
+        <span>{tzShort}</span>
+      </small>
     </div>
   );
 };
@@ -280,6 +265,18 @@ export const TaskList: React.FC = () => {
     return list;
   }, [bucketedTasks]);
 
+  // Compute next action for Today
+  const nextTask = useMemo(() => {
+    const currentTasks = bucketedTasks[currentLocalBucketId] || [];
+    const pendingInCurrent = currentTasks.find((t) => t.status !== 'done');
+    if (pendingInCurrent) return pendingInCurrent;
+    for (const bId of sectionsToRender) {
+      const p = (bucketedTasks[bId] || []).find((t) => t.status !== 'done');
+      if (p) return p;
+    }
+    return null;
+  }, [bucketedTasks, currentLocalBucketId, sectionsToRender]);
+
   const completedCount = tasks.filter((t) => t.status === 'done').length;
   const totalCount = tasks.length;
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -310,15 +307,18 @@ export const TaskList: React.FC = () => {
   const getSectionIcon = (iconName: string) => {
     switch (iconName) {
       case 'sunrise':
-        return <Sunrise className="w-5 h-5 text-[var(--accent)]" />;
+        return <Sunrise className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
       case 'sun':
-        return <Sun className="w-5 h-5 text-[var(--partner-a)]" />;
+        return <Sun className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
       case 'sunset':
-        return <Sunset className="w-5 h-5 text-[var(--partner-b)]" />;
+        return <Sunset className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
       case 'moon':
-        return <Moon className="w-5 h-5 text-[var(--text-muted)]" />;
+        return <Moon className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
+      case 'sparkles':
+        return <Sparkles className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
+      case 'clock':
       default:
-        return <Clock className="w-5 h-5 text-[var(--text)]" />;
+        return <Clock className="w-6 h-6 stroke-[2.25]" aria-hidden="true" />;
     }
   };
 
@@ -332,13 +332,13 @@ export const TaskList: React.FC = () => {
         {/* LEFT COLUMN: Day Switcher, Filters, and Time-of-Day Sections */}
         <div className="order-1 space-y-5 min-w-0">
           {/* Header & Add Mission Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="hd flex items-center justify-between gap-3 flex-wrap">
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="font-display text-3xl sm:text-4xl text-[var(--text)] tracking-tight">
-                  Tasks
+                <h1 className="text-[28px] sm:text-[38px] font-display font-normal text-[var(--text)] tracking-wide">
+                  <WavyText text="TODAY" isDisplay={true} />
                 </h1>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-chunky font-bold border-2 border-[var(--border)] ${
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-ui font-bold border-2 border-[var(--border)] ${
                   syncStatus === 'live'
                     ? 'bg-[var(--surface-2)] text-[var(--text)]'
                     : 'bg-[var(--surface)] text-[var(--text-muted)] animate-pulse'
@@ -347,8 +347,8 @@ export const TaskList: React.FC = () => {
                   <span>{syncStatus === 'live' ? 'Live' : 'Syncing'}</span>
                 </span>
               </div>
-              <p className="font-body text-xs sm:text-sm text-[var(--text-muted)] mt-1">
-                Personal and shared work, organized by your time of day ✨
+              <p className="font-ui font-medium text-xs sm:text-sm text-[var(--text-muted)] mt-0.5">
+                your day, sorted by vibes ✨
               </p>
             </div>
 
@@ -358,10 +358,10 @@ export const TaskList: React.FC = () => {
                 setCreatePreFillTime(undefined);
                 setIsCreateOpen(true);
               }}
-              className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-[var(--partner-a)] hover:opacity-90 text-white font-chunky font-bold text-sm border-2 border-[var(--border)] shadow-[0_3px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer shrink-0"
+              className="btn a font-ui font-bold text-xs sm:text-sm"
             >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>New Task</span>
+              <GoogleIcon name="add" size={16} />
+              <span>＋ New task</span>
             </button>
           </div>
 
@@ -383,7 +383,7 @@ export const TaskList: React.FC = () => {
           )}
 
           {/* Day Switcher Toolbar (Yesterday / Today / Tomorrow / Custom Date) */}
-          <div className="card p-2 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="card card-switcher p-2 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-1.5">
               {[
                 {
@@ -422,7 +422,7 @@ export const TaskList: React.FC = () => {
 
             {/* A6: Friendly date label next to calendar icon; native picker opens on tap */}
             <label className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface-2)]/80 border border-[var(--border)] font-ui text-xs font-semibold text-[var(--text)] cursor-pointer">
-              <CalendarIcon className="w-4 h-4 text-[var(--partner-a)] shrink-0" />
+              <GoogleIcon name="calendar_month" size={16} className="text-[var(--partner-a)] shrink-0" />
               <span>{formatFriendlyDate(selectedDate, now)}</span>
               <input
                 type="date"
@@ -443,8 +443,8 @@ export const TaskList: React.FC = () => {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {(
               [
-                { key: 'mine', label: 'My Tasks' },
-                { key: 'partner', label: `${partnerUser.displayName || 'Vidhi'}'s Tasks` },
+                { key: 'mine', label: 'My tasks' },
+                { key: 'partner', label: `${partnerUser.displayName || 'Vidhi'}’s tasks` },
                 { key: 'done', label: `Done (${completedCount})` },
               ] as const
             ).map((tab) => (
@@ -452,16 +452,34 @@ export const TaskList: React.FC = () => {
                 key={tab.key}
                 type="button"
                 onClick={() => setFilter(tab.key)}
-                className={`px-4 py-2 rounded-2xl text-xs font-ui font-semibold whitespace-nowrap transition-all cursor-pointer border-2 ${
-                  filter === tab.key
-                    ? 'bg-[var(--surface-2)] text-[var(--text)] border-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] -translate-y-0.5'
-                    : 'bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] border-[var(--border)]'
-                }`}
+                className={`chip ${filter === tab.key ? 'on' : ''} text-xs font-ui font-semibold whitespace-nowrap`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
+
+          {/* Next Action Highlight (Obvious at a glance) */}
+          {selectedDate === todayStr && filter !== 'done' && nextTask && (
+            <div className="card p-4 border-2 border-[var(--accent)] bg-gradient-to-r from-[var(--surface)] to-[var(--surface-2)] shadow-[0_4px_0_var(--shadow-color)] space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[var(--accent)] animate-ping" />
+                  <span className="font-heading text-xs uppercase tracking-wider text-[var(--partner-a)]">
+                    Next Action • Focus Now
+                  </span>
+                </div>
+                <span className="font-ui text-xs font-semibold text-[var(--text-muted)]">
+                  {getBucketDefinition(getBucket(nextTask.startAt, currentUser.timezone)).label}
+                </span>
+              </div>
+              <TaskCard
+                task={nextTask}
+                isOverdue={nextTask.task_date < todayStr && nextTask.status !== 'done'}
+                onOpenDoodlePreview={(url) => setDoodlePreviewUrl(url)}
+              />
+            </div>
+          )}
 
           {/* TIME-OF-DAY SECTIONS (A4) */}
           <div className="space-y-4">
@@ -473,10 +491,6 @@ export const TaskList: React.FC = () => {
 
               const totalSectionTasks = sectionTasks.length;
               const doneSectionTasks = sectionTasks.filter((t) => t.status === 'done').length;
-              const sectionProgressPct =
-                totalSectionTasks > 0
-                  ? Math.round((doneSectionTasks / totalSectionTasks) * 100)
-                  : 0;
 
               const isEmpty = totalSectionTasks === 0;
               const isAutoCollapsed =
@@ -493,37 +507,37 @@ export const TaskList: React.FC = () => {
               return (
                 <div
                   key={bucketId}
-                  className={`card transition-all duration-200 overflow-hidden ${
+                  className={`part part-${bucketId} ${!isCollapsed ? 'open' : ''} ${
                     isCurrentSection
                       ? 'border-[var(--accent)] ring-2 ring-[var(--accent)]'
                       : ''
                   }`}
                 >
-                  {/* Collapsible Section Header: 56px height row */}
+                  {/* Collapsible Section Header */}
                   <div
                     onClick={() => toggleSection(bucketId)}
-                    className="min-h-[56px] h-14 px-4 flex items-center justify-between gap-3 cursor-pointer select-none bg-[var(--surface)] hover:bg-[var(--surface-2)]/50 transition-colors"
+                    className="ph flex items-center justify-between gap-3 p-3 sm:p-4 cursor-pointer select-none"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {/* Icon 40px */}
-                      <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] flex items-center justify-center shrink-0 shadow-xs">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      {/* Icon */}
+                      <div className="ic">
                         {getSectionIcon(def.icon)}
                       </div>
 
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-chunky text-base font-bold text-[var(--text)] leading-none truncate">
+                          <h3 className="font-chunky text-base font-bold leading-none truncate">
                             {def.label}
                           </h3>
                           {isCurrentSection && (
-                            <span className="px-2 py-0.5 rounded-full bg-[var(--accent)] text-[var(--text)] text-[10px] font-chunky font-bold uppercase tracking-wider border border-[var(--border)] shadow-xs">
-                              Now
+                            <span className="now">
+                              NOW
                             </span>
                           )}
                         </div>
-                        <span className="font-ui text-xs text-[var(--text-muted)] mt-0.5 block truncate">
+                        <small className="font-ui text-xs text-[var(--text-muted)] mt-0.5 block truncate">
                           {def.timeRange}
-                        </span>
+                        </small>
                       </div>
                     </div>
 
@@ -540,33 +554,23 @@ export const TaskList: React.FC = () => {
                           }}
                           title={`Add task for ${def.label} (${def.defaultTime})`}
                           aria-label={`Add task for ${def.label} (${def.defaultTime})`}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] font-chunky text-xs font-bold border border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer"
+                          className="btn d text-xs py-1 px-2.5"
                         >
-                          <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <GoogleIcon name="add" size={14} />
                           <span>Add</span>
                         </button>
                       )}
 
-                      {/* Done / Total count in --font-numeric aligned right with chevron */}
-                      <div className="flex flex-col items-end">
-                        <span className="font-numeric text-xs font-bold text-[var(--text)]">
-                          {doneSectionTasks}/{totalSectionTasks}
-                        </span>
-                        {totalSectionTasks > 0 && (
-                          <div className="w-14 h-1.5 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden mt-0.5">
-                            <div
-                              className="h-full bg-[var(--success)] transition-all duration-300"
-                              style={{ width: `${sectionProgressPct}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
+                      {/* Done / Total count */}
+                      <b className="fat text-sm">
+                        {doneSectionTasks}/{totalSectionTasks}
+                      </b>
 
-                      <div className="p-1 rounded-xl border border-[var(--border)] text-[var(--text-muted)]">
+                      <div className="p-1 rounded-xl border border-[var(--border)] text-[var(--text-muted)] flex items-center justify-center">
                         {isCollapsed ? (
-                          <ChevronDown className="w-4 h-4" />
+                          <GoogleIcon name="expand_more" size={16} />
                         ) : (
-                          <ChevronUp className="w-4 h-4" />
+                          <GoogleIcon name="expand_less" size={16} />
                         )}
                       </div>
                     </div>
@@ -574,7 +578,7 @@ export const TaskList: React.FC = () => {
 
                   {/* Section Tasks List (when expanded) */}
                   {!isCollapsed && (
-                    <div className="p-4 pt-0 space-y-3 border-t border-[var(--border)]/60 bg-[var(--surface)]">
+                    <div className="pb space-y-3 pt-2">
                       {sectionTasks.length === 0 ? (
                         <div className="text-center py-6 px-4 rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)]/40 my-2">
                           <p className="font-ui text-xs text-[var(--text-muted)] mb-3">
@@ -590,14 +594,14 @@ export const TaskList: React.FC = () => {
                             }}
                             title={`Add task for ${def.label} (${def.defaultTime})`}
                             aria-label={`Add task for ${def.label} (${def.defaultTime})`}
-                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[var(--surface)] hover:bg-[var(--accent)] text-[var(--text)] font-chunky text-xs font-bold border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer"
+                            className="btn d text-xs py-1.5 px-3.5"
                           >
-                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <GoogleIcon name="add" size={14} />
                             <span>Add</span>
                           </button>
                         </div>
                       ) : (
-                        <div className="space-y-3 pt-3">
+                        <div className="space-y-3 pt-1">
                           {sectionTasks.map((task) => (
                             <TaskCard
                               key={task.id}
@@ -622,9 +626,9 @@ export const TaskList: React.FC = () => {
 
         {/* RIGHT COLUMN: Clocks, Upcoming Moments & Daily Rhythm (Sticky on >=1100px) */}
         <div className="order-2 min-[1100px]:sticky min-[1100px]:top-[24px] space-y-5 min-w-0">
-          {/* A3: Dual Clock Cards (Equal width grid-template-columns: 1fr 1fr, container queries) */}
-          <div className="card p-5 space-y-4">
-            <div className="grid grid-cols-2 gap-3 min-w-0">
+          {/* A3: Dual Clock Cards */}
+          <div className="card card-clocks p-5 space-y-4">
+            <div className="clocks">
               <ClockTile
                 displayName={currentUser.displayName}
                 avatarUrl={currentUser.avatarUrl}
@@ -639,13 +643,13 @@ export const TaskList: React.FC = () => {
               />
             </div>
 
-            {/* Timezone Difference Live Chip (on its own line below the tiles) */}
+            {/* Timezone Difference Live Chip */}
             <div className="pt-2 border-t-2 border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
-              <span className="px-3 py-1 rounded-xl bg-[var(--accent)] text-[var(--text)] border border-[var(--border)] font-chunky text-xs font-bold shadow-xs">
+              <span className="chip on text-xs font-bold">
                 {tzDiff}
               </span>
               {isPartnerQuiet && (
-                <span className="px-3 py-1 rounded-xl bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)] font-ui text-xs">
+                <span className="chip text-xs text-[var(--text-muted)]">
                   {partnerUser.displayName} in quiet hours 🌙
                 </span>
               )}
@@ -653,10 +657,10 @@ export const TaskList: React.FC = () => {
           </div>
 
           {/* Upcoming Moments Calendar Card (A6) */}
-          <div className="card p-5 space-y-3">
+          <div className="card card-moments p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CalendarIcon className="w-5 h-5 text-[var(--accent)]" />
+                <GoogleIcon name="calendar_month" size={20} className="text-[var(--accent)]" />
                 <h3 className="font-chunky text-base font-bold text-[var(--text)]">
                   Upcoming Moments
                 </h3>
@@ -667,7 +671,7 @@ export const TaskList: React.FC = () => {
                 className="text-xs font-ui font-semibold text-[var(--accent)] hover:underline inline-flex items-center gap-1 cursor-pointer"
               >
                 <span>Calendar</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <GoogleIcon name="arrow_forward" size={14} />
               </button>
             </div>
 
@@ -682,7 +686,7 @@ export const TaskList: React.FC = () => {
                     key={`${ev.id}-${ev.instanceDate}`}
                     onClick={() => setTab('calendar')}
                     style={{ borderLeftColor: ev.color }}
-                    className="p-3 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--surface-2)]/80 border-2 border-[var(--border)] border-l-4 text-xs cursor-pointer shadow-xs transition-transform hover:scale-[1.01]"
+                    className="ev p-3 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--surface-2)]/80 text-xs cursor-pointer shadow-xs transition-transform"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 min-w-0">
@@ -708,10 +712,10 @@ export const TaskList: React.FC = () => {
           </div>
 
           {/* Daily Rhythm Progress Card */}
-          <div className="card p-5 space-y-4">
+          <div className="card card-rhythm p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-[var(--success)]" />
+                <GoogleIcon name="check_circle" size={20} filled className="text-[var(--success)]" />
                 <h3 className="font-chunky text-base font-bold text-[var(--text)]">
                   Daily Rhythm
                 </h3>

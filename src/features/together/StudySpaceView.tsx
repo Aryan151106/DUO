@@ -1,15 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  BookOpen,
-  Play,
-  Pause,
-  RotateCcw,
-  Sparkles,
-  Volume2,
-  LogOut,
-  User,
-  Zap,
-} from 'lucide-react';
+import { GoogleIcon } from '../../components/GoogleIcon';
 import {
   createTogetherRoom,
   joinTogetherRoom,
@@ -20,6 +10,7 @@ import {
 } from '../../lib/togetherRooms';
 import { useAuthStore } from '../../lib/store';
 import { soundManager, soundEffects } from '../../lib/sound';
+import { useMediaRoomStore } from '../../lib/mediaRoomStore';
 const LiveKitMediaRoom = React.lazy(() =>
   import('./LiveKitMediaRoom').then((m) => ({ default: m.LiveKitMediaRoom }))
 );
@@ -47,6 +38,14 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
   const activeRoomId = activeTogetherRoom?.roomId || (activeSession?.id ? String(activeSession.id) : null);
   const { room: durableRoom } = useTogetherRoomDoc(activeRoomId);
   const currentRoom = durableRoom || activeTogetherRoom;
+
+  // Persistent Media Room Store integration
+  const {
+    activeRoomInfo: persistentRoomInfo,
+    room: persistentRoom,
+    explicitlyLeftRoomIds,
+    clearExplicitlyLeft,
+  } = useMediaRoomStore();
 
   // 2. Real-time Socket.IO room coordination
   const {
@@ -107,12 +106,34 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
   const joinedRoomIdRef = useRef<string | null>(null);
   const inFlightJoinRef = useRef<boolean>(false);
 
+  // Seamlessly restore view if mediaRoomStore already has this room active (e.g. returning after navigating around app)
+  useEffect(() => {
+    if (
+      persistentRoom &&
+      persistentRoomInfo &&
+      persistentRoomInfo.type === 'study' &&
+      (!currentRoom || persistentRoomInfo.roomId === currentRoom.roomId) &&
+      !isJoined
+    ) {
+      joinedRoomIdRef.current = persistentRoomInfo.roomId;
+      setLivekitData({
+        serverUrl: persistentRoomInfo.serverUrl,
+        token: persistentRoomInfo.token,
+        roomName: persistentRoomInfo.roomName,
+        displayName: persistentRoomInfo.displayName,
+      });
+      setCallType('livekit');
+      setIsJoined(true);
+    }
+  }, [persistentRoom, persistentRoomInfo, currentRoom?.roomId, isJoined]);
+
   const handleJoinRoom = async (roomIdToJoin?: string) => {
     const targetRoomId = roomIdToJoin || currentRoom?.roomId;
     if (!targetRoomId || isJoined || inFlightJoinRef.current || joinedRoomIdRef.current === targetRoomId) {
       return;
     }
 
+    clearExplicitlyLeft(targetRoomId);
     inFlightJoinRef.current = true;
     setIsJoining(true);
     try {
@@ -137,7 +158,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
     }
   };
 
-  // Auto-join active room if open
+  // Auto-join active room if open, unless explicitly left by user
   useEffect(() => {
     if (
       currentRoom &&
@@ -145,11 +166,12 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
       !isJoined &&
       !isJoining &&
       !inFlightJoinRef.current &&
-      joinedRoomIdRef.current !== currentRoom.roomId
+      joinedRoomIdRef.current !== currentRoom.roomId &&
+      !explicitlyLeftRoomIds.includes(currentRoom.roomId)
     ) {
       handleJoinRoom(currentRoom.roomId);
     }
-  }, [currentRoom?.roomId, currentRoom?.status, isJoined, isJoining]);
+  }, [currentRoom?.roomId, currentRoom?.status, isJoined, isJoining, explicitlyLeftRoomIds]);
 
   // Trigger celebratory confetti when timer hits 0
   const hasTriggeredCompleteRef = useRef(false);
@@ -234,24 +256,30 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
   // Leave room (keeps room active for partner)
   const handleLeaveRoom = () => {
     soundManager.playPing();
+    const leavingId = currentRoom?.roomId || joinedRoomIdRef.current;
     joinedRoomIdRef.current = null;
     inFlightJoinRef.current = false;
     setIsJoined(false);
     setLivekitData(null);
     stopAmbientSound();
+    if (leavingId) {
+      useMediaRoomStore.getState().leaveRoom(true);
+    }
   };
 
   // End session for both partners
   const handleEndSession = async () => {
     soundEffects.playPop();
-    if (activeRoomId) {
-      await endTogetherRoom(activeRoomId);
+    const endingId = activeRoomId || currentRoom?.roomId || joinedRoomIdRef.current;
+    if (endingId) {
+      await endTogetherRoom(endingId);
     }
     handleLeaveRoom();
     onSessionEnded?.();
   };
 
   // Lo-Fi Web Audio Ambient Synthesis
+  // Ensures soft gain (0.08) so it never masks in-call voices, and never auto-plays
   const playAmbientSound = (type: 'rain' | 'waves' | 'cafe') => {
     stopAmbientSound();
     try {
@@ -289,7 +317,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
       }
 
       const gain = ctx.createGain();
-      gain.gain.value = 0.15;
+      gain.gain.value = 0.08; // Soft background level that does not mask call audio
 
       noise.connect(filter);
       filter.connect(gain);
@@ -325,7 +353,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
 
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 text-indigo-500 border-2 border-[var(--border)] flex items-center justify-center p-3 shrink-0 shadow-[0_2px_0_var(--shadow-color)]">
-            <BookOpen className="w-7 h-7" />
+            <GoogleIcon name="menu_book" size={28} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -362,7 +390,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
           disabled={isJoining}
           className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
         >
-          <Sparkles className="w-5 h-5 fill-current animate-pulse" />
+          <GoogleIcon name="auto_awesome" size={20} filled className="animate-pulse" />
           <span>{isJoining ? 'Connecting to Room…' : isFromPartner ? `Join ${hostName}'s Study Room 🎧` : 'Enter Study Room 🚪'}</span>
         </button>
       </div>
@@ -378,7 +406,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-500 border-2 border-[var(--border)] flex items-center justify-center p-2.5">
-              <BookOpen className="w-6 h-6" />
+              <GoogleIcon name="menu_book" size={24} />
             </div>
             <div>
               <h3 className="font-chunky text-2xl font-bold text-[var(--text)]">
@@ -391,7 +419,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
           </div>
 
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[var(--surface-2)] border border-[var(--border)] font-ui text-xs font-semibold text-[var(--text-muted)]">
-            <Zap className={`w-3.5 h-3.5 ${isSocketConnected ? 'text-emerald-500 fill-current' : 'text-amber-500'}`} />
+            <GoogleIcon name="bolt" size={14} filled={isSocketConnected} className={isSocketConnected ? 'text-emerald-500' : 'text-amber-500'} />
             <span>{isSocketConnected ? 'Socket.IO Ready' : 'Durable Sync'}</span>
           </div>
         </div>
@@ -463,7 +491,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
           disabled={isStarting}
           className="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
         >
-          <Sparkles className="w-5 h-5 fill-current" />
+          <GoogleIcon name="auto_awesome" size={20} filled />
           <span>{isStarting ? 'Creating Room…' : 'Start Study Space'}</span>
         </button>
       </div>
@@ -500,7 +528,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
                       className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
                       title="End study session for both partners"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <GoogleIcon name="logout" size={14} />
                       <span className="hidden sm:inline">End Session</span>
                     </button>
                   }
@@ -521,7 +549,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
                     className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
                     title="End study session for both partners"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <GoogleIcon name="logout" size={14} />
                     <span className="hidden sm:inline">End Session</span>
                   </button>
                 }
@@ -570,7 +598,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
                     {mode === 'focus' ? '🎯 Focus Mode' : '☕ Break Mode'}
                   </span>
                   <span className="font-ui text-[11px] text-[var(--text-muted)] font-semibold hidden sm:inline flex items-center gap-1">
-                    <Zap className={`w-3 h-3 ${isSocketConnected ? 'text-emerald-500 fill-current' : 'text-amber-500'}`} />
+                    <GoogleIcon name="bolt" size={12} filled={isSocketConnected} className={isSocketConnected ? 'text-emerald-500' : 'text-amber-500'} />
                     {isSocketConnected ? 'Live Socket Sync' : isSocketReconnecting ? 'Reconnecting…' : 'Durable'}
                   </span>
                 </div>
@@ -645,7 +673,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
                   className="p-2.5 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] hover:opacity-80 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
                   title="Reset timer"
                 >
-                  <RotateCcw className="w-4 h-4" />
+                  <GoogleIcon name="restart_alt" size={16} />
                 </button>
 
                 <button
@@ -655,7 +683,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
                     mode === 'focus' ? 'bg-indigo-600 hover:bg-indigo-500' : 'bg-emerald-600 hover:bg-emerald-500'
                   }`}
                 >
-                  {isTimerRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                  {isTimerRunning ? <GoogleIcon name="pause" size={16} filled /> : <GoogleIcon name="play_arrow" size={16} filled />}
                   <span>{isTimerRunning ? 'Pause Timer' : 'Start Timer'}</span>
                 </button>
               </div>
@@ -683,7 +711,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
               <div className="bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-4 shadow-[0_2px_0_var(--shadow-color)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h4 className="font-chunky text-sm font-bold text-[var(--text)] flex items-center gap-1.5">
-                    <User className="w-3.5 h-3.5 text-indigo-500" />
+                    <GoogleIcon name="person" size={14} className="text-indigo-500" />
                     <span>Partner Status</span>
                   </h4>
                   <span className="font-ui text-[10px] text-[var(--text-muted)] font-medium">Live</span>
@@ -741,7 +769,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
               <div className="bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-4 shadow-[0_2px_0_var(--shadow-color)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <h4 className="font-chunky text-sm font-bold text-[var(--text)] flex items-center gap-1.5">
-                    <Volume2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <GoogleIcon name="volume_up" size={14} className="text-emerald-500" />
                     <span>Lo-Fi Vibes</span>
                   </h4>
                   {ambientSound !== 'none' && (
@@ -792,16 +820,7 @@ export const StudySpaceView: React.FC<StudySpaceViewProps> = ({
             type="button"
             onClick={() => {
               if (currentRoom) {
-                joinTogetherRoom(currentRoom.roomId).then((res) => {
-                  setLivekitData({
-                    roomName: res.roomName,
-                    token: res.token,
-                    serverUrl: res.serverUrl,
-                    displayName: currentUser.displayName || 'Partner',
-                  });
-                  setCallType(res.token ? 'livekit' : 'webrtc');
-                  setIsJoined(true);
-                });
+                handleJoinRoom(currentRoom.roomId);
               }
             }}
             className="px-6 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-chunky font-bold text-sm border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] cursor-pointer"

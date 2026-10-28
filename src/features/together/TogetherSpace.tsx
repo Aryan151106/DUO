@@ -12,21 +12,7 @@ import {
 } from '../../lib/firestore';
 import { useSharedMedia, type SharedMediaCategory } from '../../lib/sharedMedia';
 import confetti from 'canvas-confetti';
-import {
-  Star,
-  Clock,
-  Sparkles,
-  Trophy,
-  Plus,
-  Check,
-  Paperclip,
-  Image as ImageIcon,
-  Video as VideoIcon,
-  Palette,
-  Loader2,
-  Film,
-  BookOpen,
-} from 'lucide-react';
+import { GoogleIcon } from '../../components/GoogleIcon';
 import { AttachmentPreview } from '../chat/AttachmentPreview';
 import { format } from 'date-fns';
 import type { FileAttachment } from '../../lib/attachments';
@@ -34,6 +20,9 @@ import { PersonalDiary } from './PersonalDiary';
 import { ActiveSessionBanner } from './ActiveSessionBanner';
 import { useActiveSession } from '../../lib/activitySessions';
 import { useAnyActiveTogetherRoom } from '../../lib/togetherRooms';
+import { useMediaRoomStore } from '../../lib/mediaRoomStore';
+
+import { WavyText } from '../../components/WavyHeading';
 
 const StudySpaceView = lazy(() =>
   import('./StudySpaceView').then((m) => ({ default: m.StudySpaceView }))
@@ -44,6 +33,7 @@ const MovieNightView = lazy(() =>
 
 export const TogetherSpace: React.FC = () => {
   const { currentUser, partnerUser, couple, isDemoMode, togetherSubTab, setTogetherSubTab } = useAuthStore();
+  const activeRoomInfo = useMediaRoomStore((s) => s.activeRoomInfo);
   const liveCoupleId = !isDemoMode && couple?.id && !couple.id.startsWith('demo') ? couple.id : null;
   const activeSession = useActiveSession(couple?.id || null);
   const activeTogetherRoom = useAnyActiveTogetherRoom(liveCoupleId);
@@ -240,71 +230,61 @@ export const TogetherSpace: React.FC = () => {
         />
       )}
 
+      {/* Header */}
+      <div className="hd mb-3">
+        <div>
+          <h1 className="text-[28px] sm:text-[38px] font-display font-normal text-[var(--text)] tracking-wide">
+            <WavyText text="TOGETHER" isDisplay={true} />
+          </h1>
+          <p className="font-ui font-medium text-xs sm:text-sm text-[var(--text-muted)] mt-0.5">tiny rituals, big love ✨</p>
+        </div>
+      </div>
+
       {/* Sub-Tab Pill Bar - Single Row with Horizontal Scroll */}
-      <div className="flex flex-nowrap items-center overflow-x-auto scrollbar-none p-1.5 bg-[var(--surface)] border-2 border-[var(--border)] rounded-2xl sm:rounded-full shadow-[0_2px_0_var(--shadow-color)] gap-1.5 w-full">
+      <div className="tabs">
         <button
           type="button"
           onClick={() => setTogetherSubTab('focus')}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === 'focus'
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === 'focus' ? 'on' : ''}`}
         >
-          <Clock className="w-3.5 h-3.5" />
+          <GoogleIcon name="schedule" size={14} />
           <span>Study Space 📚</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTogetherSubTab('movie')}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === 'movie'
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === 'movie' ? 'on' : ''}`}
         >
-          <Film className="w-3.5 h-3.5" />
+          <GoogleIcon name="movie" size={14} />
           <span>Movie Night 🎬</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTogetherSubTab('wishlist')}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === 'wishlist'
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === 'wishlist' ? 'on' : ''}`}
         >
-          <Star className="w-3.5 h-3.5" />
-          <span>Bucket List</span>
+          <GoogleIcon name="star" size={14} />
+          <span>Bucket List ⭐</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTogetherSubTab('recap' as any)}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === ('recap' as any)
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === ('recap' as any) ? 'on' : ''}`}
         >
-          <Trophy className="w-3.5 h-3.5" />
-          <span>Recap</span>
+          <GoogleIcon name="emoji_events" size={14} />
+          <span>Recap 🏆</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTogetherSubTab('media')}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === 'media'
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === 'media' ? 'on' : ''}`}
         >
-          <Paperclip className="w-3.5 h-3.5" />
-          <span>Shared Media</span>
+          <GoogleIcon name="attach_file" size={14} />
+          <span>Shared Media 📎</span>
         </button>
 
         <button
@@ -313,46 +293,66 @@ export const TogetherSpace: React.FC = () => {
             soundEffects.playPop();
             setTogetherSubTab('diary');
           }}
-          className={`shrink-0 py-2 px-3.5 rounded-xl sm:rounded-full text-xs font-chunky font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
-            togetherSubTab === 'diary'
-              ? 'bg-[var(--partner-a)] text-white shadow-[0_2px_0_var(--shadow-color)]'
-              : 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-          }`}
+          className={`chip ${togetherSubTab === 'diary' ? 'on' : ''}`}
         >
-          <BookOpen className="w-3.5 h-3.5" />
+          <GoogleIcon name="menu_book" size={14} />
           <span>Personal Diary 📖</span>
         </button>
       </div>
 
-      {/* 1. STUDY SPACE */}
-      {togetherSubTab === 'focus' && (
-        <Suspense
-          fallback={
-            <div className="p-12 text-center text-[var(--text-muted)] font-ui text-xs">
-              Loading Study Space...
-            </div>
-          }
-        >
-          <StudySpaceView
-            activeSession={activeSession?.type === 'study' ? activeSession : null}
-          />
-        </Suspense>
-      )}
+      {/* 1. STUDY SPACE (with PiP keepalive if active) */}
+      <div
+        className={
+          togetherSubTab === 'focus'
+            ? 'w-full'
+            : activeRoomInfo?.type === 'study'
+            ? 'fixed -top-[9999px] -left-[9999px] w-px h-px opacity-0 pointer-events-none overflow-hidden'
+            : 'hidden'
+        }
+        aria-hidden={togetherSubTab !== 'focus'}
+        style={togetherSubTab !== 'focus' && activeRoomInfo?.type === 'study' ? { zIndex: -9999 } : undefined}
+      >
+        {(togetherSubTab === 'focus' || activeRoomInfo?.type === 'study') && (
+          <Suspense
+            fallback={
+              <div className="p-12 text-center text-[var(--text-muted)] font-ui text-xs">
+                Loading Study Space...
+              </div>
+            }
+          >
+            <StudySpaceView
+              activeSession={activeSession?.type === 'study' ? activeSession : null}
+            />
+          </Suspense>
+        )}
+      </div>
 
-      {/* 2. MOVIE NIGHT */}
-      {togetherSubTab === 'movie' && (
-        <Suspense
-          fallback={
-            <div className="p-12 text-center text-[var(--text-muted)] font-ui text-xs">
-              Loading Movie Night...
-            </div>
-          }
-        >
-          <MovieNightView
-            activeSession={activeSession?.type === 'movie' ? activeSession : null}
-          />
-        </Suspense>
-      )}
+      {/* 2. MOVIE NIGHT (with PiP keepalive if active) */}
+      <div
+        className={
+          togetherSubTab === 'movie'
+            ? 'w-full'
+            : activeRoomInfo?.type === 'movie'
+            ? 'fixed -top-[9999px] -left-[9999px] w-px h-px opacity-0 pointer-events-none overflow-hidden'
+            : 'hidden'
+        }
+        aria-hidden={togetherSubTab !== 'movie'}
+        style={togetherSubTab !== 'movie' && activeRoomInfo?.type === 'movie' ? { zIndex: -9999 } : undefined}
+      >
+        {(togetherSubTab === 'movie' || activeRoomInfo?.type === 'movie') && (
+          <Suspense
+            fallback={
+              <div className="p-12 text-center text-[var(--text-muted)] font-ui text-xs">
+                Loading Movie Night...
+              </div>
+            }
+          >
+            <MovieNightView
+              activeSession={activeSession?.type === 'movie' ? activeSession : null}
+            />
+          </Suspense>
+        )}
+      </div>
 
       {/* 3. OUR BUCKET LIST */}
       {togetherSubTab === 'wishlist' && (
@@ -370,7 +370,7 @@ export const TogetherSpace: React.FC = () => {
               onClick={() => setIsAddWishOpen(!isAddWishOpen)}
               className="px-4 py-2.5 rounded-2xl bg-[var(--partner-a)] hover:opacity-90 text-white font-chunky font-bold text-xs flex items-center gap-1.5 border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
+              <GoogleIcon name="add" size={16} />
               <span>Add Dream</span>
             </button>
           </div>
@@ -441,51 +441,42 @@ export const TogetherSpace: React.FC = () => {
               return (
                 <div
                   key={item.id}
-                  className={`bg-[var(--surface)] rounded-3xl p-4 border-2 transition-all flex items-center justify-between gap-3 shadow-[0_2px_0_var(--shadow-color)] ${
-                    item.completed
-                      ? 'border-[var(--border)] opacity-70 bg-[var(--surface-2)]'
-                      : 'border-[var(--border)] hover:border-[var(--accent)]'
-                  }`}
+                  className={`bk ${item.completed ? 'dn' : ''}`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <button
                       onClick={() => handleToggleWishComplete(item)}
-                      className={`w-7 h-7 rounded-xl flex items-center justify-center border-2 transition-all cursor-pointer ${
+                      className={`sw flex items-center justify-center transition-all cursor-pointer ${
                         item.completed
-                          ? 'bg-[var(--success)] border-[var(--border)] text-white'
-                          : 'border-[var(--border)] bg-[var(--surface-2)] hover:border-[var(--partner-a)]'
+                          ? 'bg-[var(--d)] text-white'
+                          : 'bg-[var(--bg)]'
                       }`}
                     >
-                      {item.completed && <Check className="w-4 h-4 stroke-[3]" />}
+                      {item.completed && <GoogleIcon name="check" size={16} />}
                     </button>
 
-                    <div className="min-w-0">
-                      <div
-                        className={`font-chunky text-base font-bold truncate ${
-                          item.completed ? 'line-through text-[var(--text-muted)]' : 'text-[var(--text)]'
-                        }`}
-                      >
+                    <div className="min-w-0 flex-1">
+                      <b className="font-chunky text-base font-bold truncate block">
                         {item.title}
-                      </div>
-                      <div className="font-ui text-xs font-medium text-[var(--text-muted)] capitalize">
+                      </b>
+                      <small className="font-ui text-xs text-[var(--text-muted)] capitalize block">
                         {item.category}
-                      </div>
+                      </small>
                     </div>
                   </div>
 
                   {/* Heart reaction button */}
                   <button
                     onClick={() => handleToggleWishHeart(item)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-chunky text-xs font-bold border-2 transition-all active:scale-95 cursor-pointer ${
-                      hasHearted
-                        ? 'bg-[var(--partner-a)] text-white border-[var(--border)] shadow-[0_1px_0_var(--shadow-color)]'
-                        : 'bg-[var(--surface-2)] border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]'
-                    }`}
+                    className="chip text-xs"
                   >
-                    <Star
-                      className={`w-3.5 h-3.5 ${hasHearted ? 'fill-current' : ''}`}
+                    <GoogleIcon
+                      name="star"
+                      size={14}
+                      filled={hasHearted}
+                      className={hasHearted ? 'fill-current' : ''}
                     />
-                    <span>{item.hearts.length}</span>
+                    <span>⭐ {item.hearts.length}</span>
                   </button>
                 </div>
               );
@@ -497,73 +488,43 @@ export const TogetherSpace: React.FC = () => {
       {/* 3. WEEKLY RECAP */}
       {togetherSubTab === 'recap' && (
         <div className="space-y-6">
-          <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-8 border-3 border-[var(--border)] text-center relative overflow-hidden shadow-[0_4px_0_var(--shadow-color)]">
+          <div className="card text-center relative overflow-hidden">
             {/* Top Color Strip */}
             <div className="absolute top-0 left-0 right-0 h-2 bg-[var(--accent)]" />
 
             <div className="w-16 h-16 rounded-3xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] flex items-center justify-center mx-auto mb-3 shadow-[0_2px_0_var(--shadow-color)] animate-bounce">
-              <Trophy className="w-8 h-8" />
+              <GoogleIcon name="emoji_events" size={32} />
             </div>
 
-            {/* Section heading: --font-romantic */}
-            <h2 className="text-3xl font-romantic text-[var(--text)] mb-1">Sunday Weekly Recap</h2>
-            <p className="font-ui text-xs font-medium text-[var(--text-muted)] mb-6">
-              Fun score recorded together this week 🌟
+            {/* Section heading */}
+            <h2 className="text-3xl font-chunky text-[var(--text)] mb-1">Sunday Weekly Recap</h2>
+            <p className="hand text-lg text-[var(--mut)] mb-6">
+              fun score recorded this week 🌞
             </p>
 
-            {/* Score Comparison Cards: --font-numeric for points */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div
-                className={`p-4 rounded-3xl border-2 shadow-[0_2px_0_var(--shadow-color)] ${
-                  winner?.id === currentUser.id
-                    ? 'bg-[var(--surface-2)] border-[var(--border)]'
-                    : 'bg-[var(--surface)] border-[var(--border)]'
-                }`}
-              >
-                <img
-                  src={currentUser.avatarUrl}
-                  alt={currentUser.displayName}
-                  className="w-14 h-14 rounded-2xl mx-auto mb-2 object-cover border-2 border-[var(--partner-a)] shadow-xs"
-                />
-                <div className="font-ui text-xs font-semibold text-[var(--text)]">{currentUser.displayName}</div>
-                <div className="text-3xl font-numeric font-bold text-[var(--partner-a)] mt-1 tabular-nums">
-                  {myTotalScore} pts
-                </div>
+            {/* Score Comparison Cards: .clocks with .clk and .pts */}
+            <div className="clocks mb-6">
+              <div className="clk">
+                <div className="av">🧔</div>
+                <div className="font-ui text-xs font-semibold">{currentUser.displayName}</div>
+                <div className="pts">{myTotalScore}</div>
               </div>
 
-              <div
-                className={`p-4 rounded-3xl border-2 shadow-[0_2px_0_var(--shadow-color)] ${
-                  winner?.id === partnerUser.id
-                    ? 'bg-[var(--surface-2)] border-[var(--border)]'
-                    : 'bg-[var(--surface)] border-[var(--border)]'
-                }`}
-              >
-                <img
-                  src={partnerUser.avatarUrl}
-                  alt={partnerUser.displayName}
-                  className="w-14 h-14 rounded-2xl mx-auto mb-2 object-cover border-2 border-[var(--partner-b)] shadow-xs"
-                />
-                <div className="font-ui text-xs font-semibold text-[var(--text)]">{partnerUser.displayName}</div>
-                <div className="text-3xl font-numeric font-bold text-[var(--partner-b)] mt-1 tabular-nums">
-                  {partnerTotalScore} pts
-                </div>
+              <div className="clk v">
+                <div className="av">👩</div>
+                <div className="font-ui text-xs font-semibold">{partnerUser.displayName}</div>
+                <div className="pts">{partnerTotalScore}</div>
               </div>
             </div>
 
             {/* Winner Announcement & Agreed Forfeit */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] text-left shadow-[0_2px_0_var(--shadow-color)]">
-              <div className="font-ui text-xs font-semibold uppercase tracking-wider text-[var(--partner-a)] mb-1 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-                <span>
-                  {winner ? `${winner.displayName} leads the friendly leaderboard! 🏆` : 'Tied week! Perfect balance 💕'}
-                </span>
+            <div className="ev text-left">
+              <span className="text-2xl">{winner ? '👑' : '🤝'}</span>
+              <div>
+                <b>{winner ? `${winner.displayName} leads the leaderboard!` : 'Tied week! Perfect balance'}</b>
+                <br />
+                <small className="text-[var(--text-muted)]">Agreed forfeit: “Cooks candlelight dinner together & sweet dessert!”</small>
               </div>
-              <p className="font-body text-xs text-[var(--text)]">
-                Agreed Forfeit:{' '}
-                <span className="font-bold underline text-[var(--partner-a)]">
-                  "Cooks candlelight dinner together & sweet desert!"
-                </span>
-              </p>
             </div>
           </div>
         </div>
@@ -586,34 +547,31 @@ export const TogetherSpace: React.FC = () => {
               {/* Filter Chips */}
               <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] overflow-x-auto scrollbar-none">
                 {[
-                  { id: 'all', label: 'All', icon: Paperclip },
-                  { id: 'doodles', label: 'Doodles', icon: Palette },
-                  { id: 'photos', label: 'Photos', icon: ImageIcon },
-                  { id: 'videos', label: 'Videos', icon: VideoIcon },
-                ].map((f) => {
-                  const Icon = f.icon;
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setMediaFilter(f.id as SharedMediaCategory)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-ui font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
-                        mediaFilter === f.id
-                          ? 'bg-[var(--accent)] text-[var(--text)] border border-[var(--border)] shadow-xs font-bold'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{f.label}</span>
-                    </button>
-                  );
-                })}
+                  { id: 'all', label: 'All', iconName: 'attach_file' },
+                  { id: 'doodles', label: 'Doodles', iconName: 'palette' },
+                  { id: 'photos', label: 'Photos', iconName: 'image' },
+                  { id: 'videos', label: 'Videos', iconName: 'videocam' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setMediaFilter(f.id as SharedMediaCategory)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-ui font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                      mediaFilter === f.id
+                        ? 'bg-[var(--accent)] text-[var(--text)] border border-[var(--border)] shadow-xs font-bold'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+                    }`}
+                  >
+                    <GoogleIcon name={f.iconName} size={14} />
+                    <span>{f.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
             {mediaLoading && allAttachments.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-[var(--text-muted)]">
-                <Loader2 className="w-6 h-6 animate-spin text-[var(--partner-a)] mb-2" />
+                <GoogleIcon name="progress_activity" size={24} className="animate-spin text-[var(--partner-a)] mb-2" />
                 <span className="font-ui text-xs">Opening shared memories…</span>
               </div>
             ) : Object.keys(groupedMedia).length === 0 ? (
@@ -656,7 +614,7 @@ export const TogetherSpace: React.FC = () => {
                       disabled={mediaLoading}
                       className="px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-xs font-chunky font-bold text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] transition-all cursor-pointer flex items-center gap-1.5"
                     >
-                      {mediaLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--partner-a)]" />}
+                      {mediaLoading && <GoogleIcon name="progress_activity" size={14} className="animate-spin text-[var(--partner-a)]" />}
                       <span>Load older memories</span>
                     </button>
                   </div>

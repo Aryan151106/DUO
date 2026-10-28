@@ -202,11 +202,11 @@ service cloud.firestore {
         isCoupleMember(resource.data.coupleId)
       );
 
-      // Create: Host or initial member
+      // Create: Host or initial member AND verified couple member
       allow create: if request.auth != null && (
         request.auth.uid == request.resource.data.hostUid ||
         request.auth.uid in request.resource.data.memberUids
-      );
+      ) && request.resource.data.coupleId != null && isCoupleMember(request.resource.data.coupleId);
 
       // Update: Restrict updates to authorized members and non-sensitive coordination fields
       allow update: if request.auth != null &&
@@ -225,11 +225,11 @@ service cloud.firestore {
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'study', 'movie', 'revision', 'status', 'endedAt', 'endedBy', 'memberUids', 'lastActiveAt'
         ]) &&
-        // Status transition to 'ended' is restricted strictly to the room host
-        (request.resource.data.status != 'ended' || resource.data.hostUid == request.auth.uid);
+        // Status transition to 'ended' allowed for either room host or couple member
+        (request.resource.data.status != 'ended' || resource.data.hostUid == request.auth.uid || (resource.data.coupleId != null && isCoupleMember(resource.data.coupleId)));
 
-      // Delete: only room host
-      allow delete: if request.auth != null && resource.data.hostUid == request.auth.uid;
+      // Delete: room host or couple member
+      allow delete: if request.auth != null && (resource.data.hostUid == request.auth.uid || (resource.data.coupleId != null && isCoupleMember(resource.data.coupleId)));
 
       match /{subcollection}/{docId} {
         allow read, write: if isTogetherRoomMember(roomId);

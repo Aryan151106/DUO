@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { RefreshCw, X } from 'lucide-react';
 import { useCallStore } from '../lib/store';
@@ -6,6 +6,7 @@ import { useCallStore } from '../lib/store';
 export const PwaUpdatePrompt: React.FC = () => {
   const [dismissed, setDismissed] = useState(false);
   const callState = useCallStore((s) => s.callState);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const {
     needRefresh: [needRefresh, setNeedRefresh],
@@ -15,7 +16,10 @@ export const PwaUpdatePrompt: React.FC = () => {
       console.log('[PWA] Service worker registered successfully');
       // Periodically check for updates without auto-reloading
       if (registration) {
-        setInterval(() => {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+        }
+        intervalRef.current = setInterval(() => {
           registration.update().catch(() => {});
         }, 60 * 60 * 1000); // 1 hour check
       }
@@ -24,6 +28,15 @@ export const PwaUpdatePrompt: React.FC = () => {
       console.warn('[PWA] Service worker registration notice:', error);
     },
   });
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, []);
 
   // Never interrupt an active call or display if dismissed
   if (!needRefresh || dismissed || callState !== 'idle') {

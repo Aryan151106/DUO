@@ -548,6 +548,9 @@ export function usePaginatedMessages(
     // Bounded live listener: listens to newest 50 messages only (never scans full collection)
     const liveQuery = query(messagesCol, orderBy('createdAt', 'desc'), limit(50));
 
+    // Run non-blocking background backfill for legacy documents lacking createdAt
+    backfillLegacyMessageTimestamps(coupleId).catch(() => {});
+
     const handleSnapshot = (snapshot: any) => {
       const items: ChatMessage[] = snapshot.docs.map(mapDocToChatMessage);
       if (snapshot.docs.length > 0) {
@@ -557,6 +560,8 @@ export function usePaginatedMessages(
       }
       if (snapshot.docs.length < 50) {
         setHasMoreInFirestore(false);
+      } else {
+        setHasMoreInFirestore(true);
       }
       setLiveMessages(items);
       setLoading(false);
@@ -1380,7 +1385,7 @@ export function useDiaryEntries(coupleId: string | null, userId: string) {
     }
 
     const col = collection(db, 'couples', coupleId, 'diaries');
-    const q = query(col, where('userId', '==', userId), orderBy('createdAt', 'desc'));
+    const q = query(col, where('userId', '==', userId));
 
     return onSnapshot(
       q,
@@ -1399,6 +1404,8 @@ export function useDiaryEntries(coupleId: string | null, userId: string) {
             updatedAt: data.updatedAt || new Date().toISOString(),
           };
         });
+        // Sort in memory by createdAt descending (newest first) - eliminates composite index requirement
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         setEntries(list);
         setLoading(false);
       },

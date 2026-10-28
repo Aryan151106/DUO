@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 
 export type DuoTheme =
+  | 'hazard'
+  | 'concrete'
+  | 'acid'
+  | 'arcade'
+  | 'jungle'
+  | 'taxi'
   | 'cozy-cream'
   | 'cozy-dusk'
   | 'paper-ink'
@@ -68,7 +74,7 @@ export const DEMO_ALEX: UserProfile = {
   avatarUrl:
     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
   timezone: 'Asia/Kolkata',
-  theme: 'cozy-cream',
+  theme: 'hazard',
   quietHoursStart: '23:00',
   quietHoursEnd: '07:30',
   moodStatus: 'Thinking of you ❤️',
@@ -81,7 +87,7 @@ export const DEMO_SAM: UserProfile = {
   avatarUrl:
     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   timezone: 'Asia/Kolkata',
-  theme: 'cozy-cream',
+  theme: 'hazard',
   quietHoursStart: '23:30',
   quietHoursEnd: '08:00',
   moodStatus: 'Thinking of you ✨',
@@ -93,7 +99,7 @@ export const INITIAL_USER: UserProfile = {
   displayName: 'Aryan',
   avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=aryan',
   timezone: defaultTimezone,
-  theme: 'cozy-cream',
+  theme: 'hazard',
   quietHoursStart: '23:00',
   quietHoursEnd: '07:00',
   moodStatus: 'Online ✨',
@@ -105,7 +111,7 @@ export const INITIAL_PARTNER: UserProfile = {
   displayName: 'Vidhi',
   avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=vidhi',
   timezone: defaultTimezone,
-  theme: 'cozy-cream',
+  theme: 'hazard',
   quietHoursStart: '23:00',
   quietHoursEnd: '07:00',
   moodStatus: 'Online ✨',

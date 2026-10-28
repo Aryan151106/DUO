@@ -24,29 +24,24 @@ import { CallOverlay } from '../features/calls/CallOverlay';
 import { ReminderBanner } from '../features/calendar/ReminderBanner';
 import { TaskReminderBanner } from '../features/tasks/TaskReminderBanner';
 import { ActiveSessionBanner } from '../features/together/ActiveSessionBanner';
+import { GlobalMediaRoomHost } from '../features/together/GlobalMediaRoomHost';
 import { PwaUpdatePrompt } from './PwaUpdatePrompt';
 import { useActiveSession } from '../lib/activitySessions';
 import { useAnyActiveTogetherRoom } from '../lib/togetherRooms';
-import {
-  CalendarDays,
-  Calendar,
-  MessageCircle,
-  Paintbrush,
-  Zap,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { useMediaRoomStore } from '../lib/mediaRoomStore';
 
 const NAV_ITEMS = [
-  { id: 'today', label: 'Today', icon: CalendarDays },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
-  { id: 'chat', label: 'Chat', icon: MessageCircle },
-  { id: 'doodle', label: 'Doodle', icon: Paintbrush },
-  { id: 'together', label: 'Together', icon: Zap },
-  { id: 'settings', label: 'Settings', icon: SlidersHorizontal },
+  { id: 'today', label: 'Today', emoji: '🌞' },
+  { id: 'calendar', label: 'Calendar', emoji: '📅' },
+  { id: 'chat', label: 'Chat', emoji: '💬' },
+  { id: 'doodle', label: 'Doodle', emoji: '🖍️' },
+  { id: 'together', label: 'Together', emoji: '⚡' },
+  { id: 'settings', label: 'Settings', emoji: '🎛️' },
 ] as const;
 
 export const Shell: React.FC = () => {
   const { activeTab, setTab, couple, setTogetherSubTab, currentUser } = useAuthStore();
+  const activeRoomInfo = useMediaRoomStore((s) => s.activeRoomInfo);
   const activeSession = useActiveSession(couple?.id || null);
   const activeTogetherRoom = useAnyActiveTogetherRoom(couple?.id || null);
   const effectiveSession = activeTogetherRoom || activeSession;
@@ -171,54 +166,62 @@ export const Shell: React.FC = () => {
   }, [activeTab, couple?.id, unreadCount, markAllAsRead]);
 
   return (
-    <div className="h-screen h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] select-none overflow-hidden lg:grid lg:grid-cols-[96px_minmax(0,1fr)] lg:grid-rows-[72px_1fr] flex flex-col">
+    <div className={`h-screen h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] select-none overflow-hidden lg:grid lg:grid-cols-[96px_minmax(0,1fr)] ${activeTab === 'settings' ? 'lg:grid-rows-[72px_1fr]' : 'lg:grid-rows-[1fr]'} flex flex-col relative`}>
+      {/* Floating Sticker Emojis Background Layer */}
+      <div className="stk" aria-hidden="true">
+        {['⚡', '⭐', '🔥', '🎲', '✨', '🛹', '🎯', '🍕', '🚀', '💥'].map((emoji, i) => (
+          <span
+            key={i}
+            style={{
+              left: `${(i * 37 + 8) % 94}%`,
+              top: `${(i * 53 + 12) % 86}%`,
+              fontSize: `${28 + (i % 4) * 14}px`,
+              animationDelay: `-${i * 0.7}s`,
+            }}
+          >
+            {emoji}
+          </span>
+        ))}
+      </div>
+
       {/* DESKTOP VERTICAL LEFT SIDEBAR RAIL (>=1024px) */}
-      {/* Flush with left edge, full height from top to bottom (row 1 to 2) */}
-      <aside className="hidden lg:flex flex-col items-center py-4 px-2 w-[96px] h-full col-start-1 row-start-1 row-span-2 border-r-2 border-[var(--border)] bg-[var(--surface)] overflow-y-auto shrink-0 z-30">
-        <nav className="w-full flex flex-col gap-2">
+      <aside className="hidden lg:flex flex-col items-center desktop-nav-rail col-start-1 row-start-1 row-span-2 border-r-2 border-[var(--border)] bg-[var(--bg)] shrink-0 z-30">
+        <nav className="w-full flex flex-col gap-3 py-2 items-center">
           {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
                 onClick={() => handleTabChange(item.id)}
                 onMouseEnter={() => preloadTab(item.id)}
-                className={`w-full h-[72px] flex flex-col items-center justify-center gap-1 px-1.5 rounded-2xl transition-all cursor-pointer border-2 ${
-                  isActive
-                    ? 'bg-[var(--partner-a)] text-white border-[var(--border)] shadow-[0_3px_0_var(--shadow-color)]'
-                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)]'
-                }`}
+                className={`nv ${isActive ? 'on' : ''}`}
                 title={item.label}
               >
                 <div className="relative flex items-center justify-center">
-                  <Icon className="w-6 h-6 stroke-[2.2] shrink-0" />
+                  <i>{item.emoji}</i>
                   {item.id === 'chat' && unreadCount > 0 && (
                     <span className="absolute -top-1.5 -right-2.5 bg-rose-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 shadow-md animate-pulse">
                       {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}
                 </div>
-                <span className="font-ui font-semibold text-[13px] leading-tight text-center truncate max-w-full">
-                  {item.label}
-                </span>
+                <span>{item.label}</span>
               </button>
             );
           })}
         </nav>
       </aside>
 
-      {/* HEADER: Col 2, Row 1 on desktop; top on mobile */}
-      <div className="lg:col-start-2 lg:row-start-1 w-full z-20 flex flex-col">
-        {activeTab === 'settings' && <Header />}
-        <div className="chaos-ticker" aria-label="AV status ticker">
-          <span>AV — Aryan & Vidhi. One shared space. ✦ </span>
+      {/* HEADER: Col 2, Row 1 on desktop (only on settings) */}
+      {activeTab === 'settings' && (
+        <div className="lg:col-start-2 lg:row-start-1 w-full z-20 flex flex-col">
+          <Header />
         </div>
-      </div>
+      )}
 
-      {/* MAIN CONTENT AREA: Col 2, Row 2 on desktop */}
+      {/* MAIN CONTENT AREA */}
       <main
-        className={`lg:col-start-2 lg:row-start-2 w-full h-full min-h-0 ${
+        className={`lg:col-start-2 ${activeTab === 'settings' ? 'lg:row-start-2' : 'lg:row-start-1'} w-full h-full min-h-0 view ${
           activeTab === 'chat' || activeTab === 'doodle'
             ? 'overflow-hidden flex flex-col pb-[calc(60px+env(safe-area-inset-bottom))] lg:pb-0'
             : 'overflow-y-auto pb-[calc(76px+env(safe-area-inset-bottom))] lg:pb-8'
@@ -257,47 +260,53 @@ export const Shell: React.FC = () => {
             {activeTab === 'calendar' && <CalendarView />}
             {activeTab === 'chat' && <ChatView />}
             {activeTab === 'doodle' && <LiveDoodleCanvas />}
-            {activeTab === 'together' && <TogetherSpace />}
             {activeTab === 'settings' && <SettingsModal />}
+
+            {/* Together Space with PiP keep-alive: remains mounted whenever a call is active so video PiP never disconnects */}
+            <div
+              className={
+                activeTab === 'together'
+                  ? 'contents'
+                  : activeRoomInfo
+                  ? 'fixed -top-[9999px] -left-[9999px] w-px h-px opacity-0 pointer-events-none overflow-hidden'
+                  : 'hidden'
+              }
+              aria-hidden={activeTab !== 'together'}
+              style={activeTab !== 'together' && activeRoomInfo ? { zIndex: -9999 } : undefined}
+            >
+              {(activeTab === 'together' || Boolean(activeRoomInfo)) && <TogetherSpace />}
+            </div>
           </Suspense>
         </div>
       </main>
 
       {/* MOBILE FULL-WIDTH BOTTOM TAB BAR (<1024px) */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--surface)] border-t-2 border-[var(--border)] shadow-[0_-2px_0_var(--shadow-color)] pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-center justify-around px-2 py-1.5">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleTabChange(item.id)}
-                onMouseEnter={() => preloadTab(item.id)}
-                className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-2xl transition-all cursor-pointer min-w-[52px] border-2 ${
-                  isActive
-                    ? 'bg-[var(--partner-a)] text-white border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)]'
-                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
-                }`}
-              >
-                <div className="relative flex items-center justify-center">
-                  <Icon className="w-5 h-5 stroke-[2.2]" />
-                  {item.id === 'chat' && unreadCount > 0 && (
-                    <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 shadow-md animate-pulse">
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </span>
-                  )}
-                </div>
-                <span className="font-ui font-semibold text-[11px]">
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      <nav className="flex lg:hidden mobile-bottom-nav z-40">
+        {NAV_ITEMS.map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleTabChange(item.id)}
+              onMouseEnter={() => preloadTab(item.id)}
+              className={`nv ${isActive ? 'on' : ''}`}
+            >
+              <div className="relative flex items-center justify-center">
+                <i>{item.emoji}</i>
+                {item.id === 'chat' && unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2 bg-rose-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center px-0.5 shadow-md animate-pulse">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </div>
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
       </nav>
 
       {/* OVERLAYS */}
+      <GlobalMediaRoomHost />
       <ReminderBanner />
       <TaskReminderBanner />
       <NudgeAlarmOverlay />

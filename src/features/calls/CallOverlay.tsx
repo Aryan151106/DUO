@@ -4,26 +4,7 @@ import { soundEngine } from '../../lib/sounds';
 import { callSignaling, type CallDocument } from '../../lib/callSignaling';
 import { sendMessage } from '../../lib/firestore';
 import { requestCamera, stopMediaStream } from '../../lib/media';
-import {
-  Phone,
-  PhoneOff,
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  Maximize2,
-  Minimize2,
-  RefreshCw,
-  AlertCircle,
-  ScreenShare,
-  ScreenShareOff,
-  Lock,
-  MessageSquare,
-  Move,
-  X,
-  Volume2,
-  VolumeX,
-} from 'lucide-react';
+import { GoogleIcon } from '../../components/GoogleIcon';
 
 const QUICK_DECLINE_MESSAGES = [
   "Can't talk now. Call you later?",
@@ -704,7 +685,7 @@ export const CallOverlay: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
             <span className="truncate">{partnerUser.displayName}</span>
           </div>
-          <Move className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+          <GoogleIcon name="drag_indicator" size={16} className="text-neutral-400 shrink-0" />
         </div>
 
         {/* Video / Avatar Viewport */}
@@ -751,7 +732,7 @@ export const CallOverlay: React.FC = () => {
             }`}
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+            {isMuted ? <GoogleIcon name="mic_off" size={16} /> : <GoogleIcon name="mic" size={16} />}
           </button>
 
           <button
@@ -760,7 +741,7 @@ export const CallOverlay: React.FC = () => {
             className="p-2 rounded-full bg-neutral-700 text-white hover:bg-neutral-600 cursor-pointer"
             title="Maximize call"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <GoogleIcon name="fullscreen" size={16} />
           </button>
 
           <button
@@ -769,7 +750,7 @@ export const CallOverlay: React.FC = () => {
             className="p-2 rounded-full bg-rose-600 text-white hover:bg-rose-700 cursor-pointer"
             title="End call"
           >
-            <PhoneOff className="w-3.5 h-3.5" />
+            <GoogleIcon name="call_end" size={16} />
           </button>
         </div>
       </div>
@@ -802,7 +783,7 @@ export const CallOverlay: React.FC = () => {
           {/* Top Row: Lock / Security & Minimize */}
           <div className="w-full flex items-center justify-between text-neutral-400 mb-2">
             <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide">
-              <Lock className="w-3 h-3 text-emerald-400" />
+              <GoogleIcon name="lock" size={14} className="text-emerald-400" />
               <span>End-to-end encrypted</span>
             </div>
 
@@ -813,7 +794,7 @@ export const CallOverlay: React.FC = () => {
                 className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
                 title="Minimize call"
               >
-                <Minimize2 className="w-4 h-4" />
+                <GoogleIcon name="fullscreen_exit" size={18} />
               </button>
             )}
           </div>
@@ -842,7 +823,7 @@ export const CallOverlay: React.FC = () => {
 
           {cameraError && (
             <div className="mt-2 flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px]">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <GoogleIcon name="error" size={16} className="shrink-0" />
               <span>{cameraError}</span>
             </div>
           )}
@@ -918,7 +899,7 @@ export const CallOverlay: React.FC = () => {
                 />
                 {isCameraOff && !isScreenSharing && (
                   <div className="absolute inset-0 bg-[#1f2c34] flex flex-col items-center justify-center text-neutral-300 text-[10px]">
-                    <VideoOff className="w-5 h-5 mb-1 text-rose-400" />
+                    <GoogleIcon name="videocam_off" size={20} className="mb-1 text-rose-400" />
                     <span>Camera off</span>
                   </div>
                 )}
@@ -1015,7 +996,7 @@ export const CallOverlay: React.FC = () => {
                   onClick={() => setShowQuickReplies(false)}
                   className="p-1 rounded-lg text-neutral-400 hover:text-white cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  <GoogleIcon name="close" size={16} />
                 </button>
               </div>
 
@@ -1050,7 +1031,7 @@ export const CallOverlay: React.FC = () => {
                   className="w-16 h-16 rounded-full bg-rose-600 hover:bg-rose-700 active:scale-95 text-white flex items-center justify-center shadow-lg transition-transform cursor-pointer"
                   aria-label="Decline call"
                 >
-                  <PhoneOff className="w-7 h-7" />
+                  <GoogleIcon name="call_end" size={28} />
                 </button>
                 <span className="text-xs text-neutral-300 font-medium">Decline</span>
               </div>
@@ -1064,7 +1045,7 @@ export const CallOverlay: React.FC = () => {
                   title="Reply with message"
                   aria-label="Reply with message"
                 >
-                  <MessageSquare className="w-5 h-5" />
+                  <GoogleIcon name="chat" size={20} />
                 </button>
                 <span className="text-[11px] text-neutral-400 font-medium">Message</span>
               </div>
@@ -1077,7 +1058,7 @@ export const CallOverlay: React.FC = () => {
                   className="w-16 h-16 rounded-full bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white flex items-center justify-center shadow-lg transition-transform cursor-pointer animate-pulse"
                   aria-label="Accept call"
                 >
-                  <Phone className="w-7 h-7" />
+                  <GoogleIcon name="call" size={28} />
                 </button>
                 <span className="text-xs text-neutral-300 font-medium">Accept</span>
               </div>
@@ -1095,7 +1076,7 @@ export const CallOverlay: React.FC = () => {
                   }`}
                   title={isSpeakerOn ? 'Speaker On' : 'Speaker Off'}
                 >
-                  {isSpeakerOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                  {isSpeakerOn ? <GoogleIcon name="volume_up" size={20} /> : <GoogleIcon name="volume_off" size={20} />}
                 </button>
               )}
 
@@ -1107,7 +1088,7 @@ export const CallOverlay: React.FC = () => {
                   className="w-12 h-12 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-md"
                   title="Switch Camera"
                 >
-                  <RefreshCw className="w-5 h-5" />
+                  <GoogleIcon name="flip_camera_ios" size={20} />
                 </button>
               )}
 
@@ -1123,7 +1104,7 @@ export const CallOverlay: React.FC = () => {
                   }`}
                   title={isCameraOff ? 'Turn Camera On' : 'Turn Camera Off'}
                 >
-                  {isCameraOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
+                  {isCameraOff ? <GoogleIcon name="videocam_off" size={20} /> : <GoogleIcon name="videocam" size={20} />}
                 </button>
               )}
 
@@ -1140,9 +1121,9 @@ export const CallOverlay: React.FC = () => {
                   title={isScreenSharing ? 'Stop Screen Share' : 'Share Screen'}
                 >
                   {isScreenSharing ? (
-                    <ScreenShareOff className="w-5 h-5" />
+                    <GoogleIcon name="stop_screen_share" size={20} />
                   ) : (
-                    <ScreenShare className="w-5 h-5" />
+                    <GoogleIcon name="screen_share" size={20} />
                   )}
                 </button>
               )}
@@ -1158,7 +1139,7 @@ export const CallOverlay: React.FC = () => {
                 }`}
                 title={isMuted ? 'Unmute Mic' : 'Mute Mic'}
               >
-                {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                {isMuted ? <GoogleIcon name="mic_off" size={20} /> : <GoogleIcon name="mic" size={20} />}
               </button>
 
               {/* End Call Button (Large Crimson Red Circle) */}
@@ -1169,7 +1150,7 @@ export const CallOverlay: React.FC = () => {
                 title="End Call"
                 aria-label="End Call"
               >
-                <PhoneOff className="w-6 h-6" />
+                <GoogleIcon name="call_end" size={26} />
               </button>
             </div>
           )}

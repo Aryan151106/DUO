@@ -57,133 +57,13 @@ admin.initializeApp();
 const db = admin.firestore();
 /**
  * Trigger: When a notification document is created in couples/{coupleId}/notifications/{notifId}
- * Dispatches background Web Push / FCM notifications to the partner's registered devices.
+ * DEPRECATED: Web push is authoritatively dispatched via OneSignal (sendPushNotification).
+ * Retained as a safe no-op to prevent duplicate notifications and maintain deployment stability.
  */
-exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("couples/{coupleId}/notifications/{notifId}", async (event) => {
-    const snap = event.data;
-    if (!snap)
-        return;
-    const notif = snap.data();
-    const { coupleId, notifId } = event.params;
-    const senderId = notif.senderId;
-    try {
-        // 1. Resolve recipient UID
-        let recipientId = notif.metadata?.recipientId || null;
-        if (!recipientId) {
-            const coupleSnap = await db.collection("couples").doc(coupleId).get();
-            if (coupleSnap.exists) {
-                const members = coupleSnap.data()?.members || [];
-                recipientId = members.find((m) => m !== senderId) || null;
-            }
-        }
-        if (!recipientId) {
-            console.warn(`[PushDispatcher] Could not determine recipient for notif ${notifId}`);
-            return;
-        }
-        // 2. Query all registered device tokens for the recipient
-        const devicesSnap = await db
-            .collection("profiles")
-            .doc(recipientId)
-            .collection("devices")
-            .get();
-        if (devicesSnap.empty) {
-            console.log(`[PushDispatcher] No devices registered for user ${recipientId}`);
-            return;
-        }
-        const tokens = [];
-        const tokenDocMap = new Map(); // token -> deviceDocId
-        devicesSnap.forEach((docSnap) => {
-            const data = docSnap.data();
-            if (data.token && typeof data.token === "string") {
-                tokens.push(data.token);
-                tokenDocMap.set(data.token, docSnap.id);
-            }
-        });
-        if (tokens.length === 0)
-            return;
-        const title = notif.title || "Duo";
-        const body = notif.body || "New update from your partner.";
-        const type = notif.type || "message";
-        const deepLink = notif.deepLink || "/";
-        // 3. Build FCM multicast message
-        const response = await admin.messaging().sendEachForMulticast({
-            tokens,
-            notification: {
-                title,
-                body,
-            },
-            data: {
-                coupleId,
-                notifId,
-                type,
-                senderId: senderId || "",
-                senderName: notif.senderName || "",
-                url: deepLink,
-            },
-            webpush: {
-                headers: {
-                    Urgency: type === "call" ? "high" : "normal",
-                },
-                notification: {
-                    title,
-                    body,
-                    icon: "/pwa-192x192.png",
-                    badge: "/favicon.svg",
-                    tag: `duo-${type}-${notifId}`,
-                    renotify: true,
-                    requireInteraction: type === "call",
-                    data: {
-                        coupleId,
-                        notifId,
-                        type,
-                        url: deepLink,
-                        senderId: senderId || "",
-                    },
-                    actions: [
-                        {
-                            action: "reply",
-                            title: "Reply 💬",
-                        },
-                        {
-                            action: "open",
-                            title: "Open Duo",
-                        },
-                    ],
-                },
-                fcmOptions: {
-                    link: deepLink,
-                },
-            },
-        });
-        console.log(`[PushDispatcher] Sent ${response.successCount}/${tokens.length} pushes for notif ${notifId}`);
-        // 4. Prune stale / unregistered tokens
-        const deletePromises = [];
-        response.responses.forEach((resp, idx) => {
-            if (!resp.success && resp.error) {
-                const code = resp.error.code;
-                if (code === "messaging/registration-token-not-registered" ||
-                    code === "messaging/invalid-registration-token") {
-                    const staleToken = tokens[idx];
-                    const docId = tokenDocMap.get(staleToken);
-                    if (docId) {
-                        deletePromises.push(db
-                            .collection("profiles")
-                            .doc(recipientId)
-                            .collection("devices")
-                            .doc(docId)
-                            .delete());
-                    }
-                }
-            }
-        });
-        if (deletePromises.length > 0) {
-            await Promise.all(deletePromises);
-            console.log(`[PushDispatcher] Pruned ${deletePromises.length} stale device tokens`);
-        }
-    }
-    catch (err) {
-        console.error(`[PushDispatcher] Error dispatching push for notif ${notifId}:`, err);
-    }
+exports.onNotificationCreated = (0, firestore_1.onDocumentCreated)("couples/{coupleId}/notifications/{notifId}", async () => {
+    // Deprecated: Push notifications are handled via OneSignal Cloud Function (sendPushNotification).
+    // Intentionally no-op to avoid double notification delivery.
+    return;
 });
 /**
  * Trigger: When a call document is created in couples/{coupleId}/calls/{callId}

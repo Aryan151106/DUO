@@ -655,14 +655,14 @@ export const LiveDoodleCanvas: React.FC = () => {
   ];
 
   return (
-    <div className="relative w-full h-[calc(100dvh-9rem)] min-h-[360px] flex flex-col min-h-0 flex-1 overflow-hidden select-none bg-[var(--surface)] rounded-3xl border-2 sm:border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
+    <div className="relative w-full h-full flex-1 min-h-0 flex flex-col overflow-hidden select-none bg-[var(--surface)] rounded-2xl sm:rounded-3xl border-2 sm:border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
       {/* 1. TOP FLOATING CONTROLS OVER CANVAS */}
       <div className="absolute top-3 inset-x-3 z-30 flex items-center justify-between pointer-events-none">
         {/* Floating Tools Trigger Button */}
         <button
           type="button"
           onClick={() => setIsToolsOpen(!isToolsOpen)}
-          className="pointer-events-auto px-3.5 py-2 rounded-2xl bg-[var(--surface)]/90 backdrop-blur-md border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] hover:bg-[var(--surface-2)] flex items-center gap-2 font-chunky text-xs font-bold text-[var(--text)] transition-transform active:scale-95 cursor-pointer"
+          className="pointer-events-auto px-3.5 py-2 rounded-2xl bg-[var(--surface)]/90 backdrop-blur-md border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] hover:bg-[var(--surface-2)] flex items-center gap-2 font-ui text-xs font-bold text-[var(--text)] transition-transform active:scale-95 cursor-pointer"
           title="Open drawing tools"
           aria-label="Toggle drawing tools panel"
         >
@@ -720,14 +720,14 @@ export const LiveDoodleCanvas: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowGallery(!showGallery)}
-            className={`p-2 rounded-xl border-2 border-[var(--border)] font-chunky text-xs font-bold cursor-pointer shadow-xs flex items-center gap-1 ${
+            className={`p-2 rounded-xl border-2 border-[var(--border)] font-ui text-xs font-bold cursor-pointer shadow-xs flex items-center gap-1 ${
               showGallery ? 'bg-[var(--accent)] text-[var(--text)]' : 'bg-[var(--surface)]/90 backdrop-blur-md text-[var(--text)]'
             }`}
             title="Shared Doodle Gallery"
             aria-label="Open Gallery"
           >
             <ImageIcon className="w-4 h-4" />
-            <span className="text-[11px] font-numeric font-bold">{gallery.length}</span>
+            <span className="text-[11px] font-ui font-bold">{gallery.length}</span>
           </button>
         </div>
       </div>
@@ -738,7 +738,7 @@ export const LiveDoodleCanvas: React.FC = () => {
         {strokes.length === 0 && !currentStroke && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-6 animate-in fade-in duration-300 z-10">
             <div className="px-5 py-3.5 rounded-3xl bg-[var(--surface)]/90 backdrop-blur-md border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] text-center space-y-1 max-w-sm">
-              <p className="font-chunky text-sm font-bold text-[var(--text)]">
+              <p className="font-heading text-sm font-normal text-[var(--text)]">
                 Start drawing, or open Tools to choose a brush 🎨
               </p>
               <p className="font-ui text-xs text-[var(--text-muted)]">
@@ -893,7 +893,7 @@ export const LiveDoodleCanvas: React.FC = () => {
         <div className="p-3.5 pb-2 border-b border-[var(--border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <Sliders className="w-4 h-4 text-[var(--accent)]" />
-            <h3 className="font-chunky text-sm font-bold text-[var(--text)]">Drawing Studio</h3>
+            <h3 className="font-heading text-base font-normal text-[var(--text)]">Drawing Studio</h3>
           </div>
           <button
             type="button"

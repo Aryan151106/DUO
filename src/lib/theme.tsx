@@ -3,6 +3,12 @@ import { useAuthStore } from './store';
 import { updateProfile } from './firestore';
 
 export type ThemeName =
+  | 'hazard'
+  | 'concrete'
+  | 'acid'
+  | 'arcade'
+  | 'jungle'
+  | 'taxi'
   | 'cozy-cream'
   | 'cozy-dusk'
   | 'paper-ink'
@@ -40,6 +46,228 @@ export interface PresetThemeDefinition {
 }
 
 export const PRESET_THEMES: Record<Exclude<ThemeName, 'custom'>, PresetThemeDefinition> = {
+  hazard: {
+    id: 'hazard',
+    name: 'Hazard (AV Flagship)',
+    description: 'Electric flame orange, canary yellow, cobalt blue & emerald',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FF5A1F',
+      partnerB: '#2B50FF',
+      accent: '#FFE600',
+      accent2: '#00C46A',
+      success: '#00C46A',
+      urgent: '#FF3B30',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FF5A1F',
+      partnerB: '#3D61FF',
+      accent: '#FFE600',
+      accent2: '#00C46A',
+      success: '#00C46A',
+      urgent: '#FF4D4D',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
+  concrete: {
+    id: 'concrete',
+    name: 'Concrete',
+    description: 'High-contrast signal crimson, sun yellow & azure blue',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FF3B30',
+      partnerB: '#0A84FF',
+      accent: '#FFD60A',
+      accent2: '#30D158',
+      success: '#30D158',
+      urgent: '#E03131',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FF453A',
+      partnerB: '#0A84FF',
+      accent: '#FFD60A',
+      accent2: '#30D158',
+      success: '#30D158',
+      urgent: '#FF453A',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
+  acid: {
+    id: 'acid',
+    name: 'Acid',
+    description: 'Vibrant neon tangerine, lime chartreuse & deep indigo',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FF6A00',
+      partnerB: '#00B3A4',
+      accent: '#C6FF00',
+      accent2: '#1A1AFF',
+      success: '#1A1AFF',
+      urgent: '#FF2E2E',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FF7A1A',
+      partnerB: '#00B3A4',
+      accent: '#C6FF00',
+      accent2: '#4444FF',
+      success: '#4444FF',
+      urgent: '#FF4D4D',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
+  arcade: {
+    id: 'arcade',
+    name: 'Arcade',
+    description: 'Retro gameboy fire red, amber gold & hyper blue',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FF2E2E',
+      partnerB: '#0057FF',
+      accent: '#FFB800',
+      accent2: '#00D084',
+      success: '#00D084',
+      urgent: '#FF2E2E',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FF4D4D',
+      partnerB: '#337AFF',
+      accent: '#FFB800',
+      accent2: '#00D084',
+      success: '#00D084',
+      urgent: '#FF4D4D',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
+  jungle: {
+    id: 'jungle',
+    name: 'Jungle',
+    description: 'Tropical citrus orange, warm saffron & deep forest emerald',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FF7A00',
+      partnerB: '#007F5F',
+      accent: '#F2E400',
+      accent2: '#00B4D8',
+      success: '#00B4D8',
+      urgent: '#E63900',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FF8A1A',
+      partnerB: '#007F5F',
+      accent: '#F2E400',
+      accent2: '#33C4E3',
+      success: '#33C4E3',
+      urgent: '#FF4D4D',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
+  taxi: {
+    id: 'taxi',
+    name: 'Taxi',
+    description: 'Iconic metro yellow cab, flame red & street cobalt',
+    light: {
+      bg: '#EDEDE8',
+      surface: '#FFFFFF',
+      surface2: '#E2E2DC',
+      border: '#101114',
+      text: '#101114',
+      textMuted: '#5A5D66',
+      partnerA: '#FFC400',
+      partnerB: '#E63900',
+      accent: '#FFF200',
+      accent2: '#2F6BFF',
+      success: '#2F6BFF',
+      urgent: '#E63900',
+      shadowColor: '#101114',
+      overlay: 'rgba(16, 17, 20, 0.65)',
+    },
+    dark: {
+      bg: '#14151A',
+      surface: '#23252E',
+      surface2: '#2C2E38',
+      border: '#3A3D4A',
+      text: '#F4F4EE',
+      textMuted: '#A3A6B3',
+      partnerA: '#FFC400',
+      partnerB: '#FF4D1A',
+      accent: '#FFF200',
+      accent2: '#5788FF',
+      success: '#5788FF',
+      urgent: '#FF4D1A',
+      shadowColor: '#0A0B0E',
+      overlay: 'rgba(0, 0, 0, 0.75)',
+    },
+  },
   'cozy-cream': {
     id: 'cozy-cream',
     name: 'Cozy Cream',
@@ -354,24 +582,33 @@ export function applyThemeVariables(colors: ThemeColors, theme: ThemeName, mode:
   const root = document.documentElement;
 
   root.setAttribute('data-theme', theme);
+  root.setAttribute('data-app-theme', theme);
   root.setAttribute('data-mode', mode);
 
   const visualColors = colors;
 
   root.style.setProperty('--bg', visualColors.bg);
+  root.style.setProperty('--card', visualColors.surface);
   root.style.setProperty('--surface', visualColors.surface);
   root.style.setProperty('--surface-2', visualColors.surface2);
   root.style.setProperty('--border', visualColors.border);
   root.style.setProperty('--text', visualColors.text);
+  root.style.setProperty('--ink', visualColors.text);
   root.style.setProperty('--text-muted', visualColors.textMuted);
+  root.style.setProperty('--mut', visualColors.textMuted);
   root.style.setProperty('--partner-a', visualColors.partnerA);
+  root.style.setProperty('--a', visualColors.partnerA);
   root.style.setProperty('--partner-b', visualColors.partnerB);
+  root.style.setProperty('--c', visualColors.partnerB);
   root.style.setProperty('--accent', visualColors.accent);
+  root.style.setProperty('--b', visualColors.accent);
   root.style.setProperty('--accent-2', visualColors.accent2);
   root.style.setProperty('--success', visualColors.success);
+  root.style.setProperty('--d', visualColors.success);
   root.style.setProperty('--urgent', visualColors.urgent);
   root.style.setProperty('--shadow-color', visualColors.shadowColor);
   root.style.setProperty('--overlay', visualColors.overlay);
+  root.style.setProperty('--on', '#101114');
 
   // Backward compatibility with previous theme variable names
   root.style.setProperty('--bg-main', visualColors.bg);
@@ -419,7 +656,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const saved = localStorage.getItem('duo_theme') as ThemeName;
       if (saved && (saved in PRESET_THEMES || saved === 'custom')) return saved;
     }
-    return 'cozy-cream';
+    return 'hazard';
   });
 
   const [mode, setModeState] = useState<ThemeMode>(() => {
@@ -470,16 +707,32 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const resolvedMode: ResolvedMode = mode === 'auto' ? systemMode : mode;
 
-  // Compute active colors
+  // Sync state if currentUser.theme changes from auth / profile sync
+  useEffect(() => {
+    if (
+      currentUser?.theme &&
+      (currentUser.theme in PRESET_THEMES || currentUser.theme === 'custom') &&
+      currentUser.theme !== theme
+    ) {
+      setThemeState(currentUser.theme);
+      localStorage.setItem('duo_theme', currentUser.theme);
+    }
+  }, [currentUser?.theme]);
+
+  // Compute active colors: presets take authoritative precedence unless theme is 'custom'
   const currentColors = useMemo<ThemeColors>(() => {
-    const basePreset = PRESET_THEMES[theme === 'custom' ? 'cozy-cream' : theme] || PRESET_THEMES['cozy-cream'];
+    const basePreset = PRESET_THEMES[theme === 'custom' ? 'hazard' : theme] || PRESET_THEMES['hazard'];
     const base = resolvedMode === 'dark' ? basePreset.dark : basePreset.light;
     const custom = resolvedMode === 'dark' ? customColorsDark : customColorsLight;
 
-    return {
-      ...base,
-      ...custom,
-    };
+    if (theme === 'custom') {
+      return {
+        ...base,
+        ...custom,
+      };
+    }
+
+    return base;
   }, [theme, resolvedMode, customColorsLight, customColorsDark]);
 
   // Apply CSS variables on change
@@ -542,7 +795,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setCustomColorsDark({});
     localStorage.removeItem('duo_custom_light');
     localStorage.removeItem('duo_custom_dark');
-    setTheme('cozy-cream');
+    setTheme('hazard');
     setMode('auto');
   };
 

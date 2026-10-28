@@ -54,13 +54,13 @@ export const MonthView: React.FC<MonthViewProps> = ({
   };
 
   return (
-    <div className="w-full bg-[var(--surface)] border-3 border-[var(--border)] rounded-3xl shadow-[0_4px_0_var(--shadow-color)] overflow-hidden">
+    <div className="card w-full p-3 sm:p-5 overflow-hidden">
       {/* Weekday Labels Header */}
-      <div className="grid grid-cols-7 border-b-2 border-[var(--border)] bg-[var(--surface-2)]">
+      <div className="cal mb-2">
         {weekdays.map((dayName, idx) => (
           <div
             key={idx}
-            className="py-3 text-center text-xs font-ui font-semibold text-[var(--text-muted)] tracking-wider"
+            className="dw py-2"
           >
             {dayName}
           </div>
@@ -68,7 +68,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
       </div>
 
       {/* 7-Column Calendar Grid */}
-      <div className="grid grid-cols-7 auto-rows-fr divide-x-2 divide-y-2 divide-[var(--border)] bg-[var(--border)]">
+      <div className="cal">
         {days.map((day, idx) => {
           const dayStr = format(day, 'yyyy-MM-dd');
           const isCurrentMonth = isSameMonth(day, currentDate);
@@ -89,13 +89,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
               }}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, dayStr)}
-              className={`min-h-[86px] sm:min-h-[110px] p-1.5 sm:p-2 transition-colors cursor-pointer flex flex-col justify-between ${
-                isCurrentMonth ? 'bg-[var(--surface)]' : 'bg-[var(--surface-2)]/60 text-[var(--text-muted)]'
-              } ${
-                isSelected
-                  ? 'ring-3 ring-inset ring-[var(--accent)] bg-[var(--surface-2)]'
-                  : 'hover:bg-[var(--surface-2)]/40'
-              }`}
+              className={`dy ${!isCurrentMonth ? 'out' : ''} ${isCurrentDay ? 'td' : ''} ${isSelected ? 'sel' : ''} flex flex-col justify-between`}
             >
               {/* Day Number Header */}
               <div className="flex items-center justify-between">
@@ -114,7 +108,7 @@ export const MonthView: React.FC<MonthViewProps> = ({
                 </span>
 
                 {dayEvents.length > 0 && (
-                  <span className="text-[10px] font-chunky text-[var(--text-muted)] hidden sm:inline">
+                  <span className="text-[10px] font-ui font-semibold text-[var(--text-muted)] hidden sm:inline">
                     {dayEvents.length} {dayEvents.length === 1 ? 'event' : 'events'}
                   </span>
                 )}
@@ -140,14 +134,14 @@ export const MonthView: React.FC<MonthViewProps> = ({
                     title={`${ev.title} (${formatEventTime(ev, currentUser.timezone, timeFormat === '12h')})`}
                   >
                     <span>{ev.icon || '🌸'}</span>
-                    <span className="truncate flex-1 font-chunky text-[11px] font-bold">
+                    <span className="truncate flex-1 font-ui text-[11px] font-semibold">
                       {ev.title}
                     </span>
                   </div>
                 ))}
 
                 {extraCount > 0 && (
-                  <div className="text-[10px] font-chunky font-bold text-[var(--text-muted)] px-1">
+                  <div className="text-[10px] font-ui font-semibold text-[var(--text-muted)] px-1">
                     +{extraCount} more
                   </div>
                 )}

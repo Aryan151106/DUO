@@ -7,6 +7,7 @@ import { updateCoupleNickname } from '../../lib/firestore';
 import { broadcastEvent } from '../../lib/supabase';
 import { soundManager, soundEffects } from '../../lib/sound';
 import { formatTimeOnly } from '../../lib/format';
+import { useMinuteNow } from '../../lib/useNow';
 import { usePaginatedMessages, sendMessage, updateMessage, markMessagesRead, updateTypingStatus } from '../../lib/firestore';
 import {
   groupMessagesByDay,
@@ -69,7 +70,9 @@ const EMOJI_LABELS: Record<string, string> = {
 
 export const ChatView: React.FC = () => {
   const { currentUser, partnerUser, couple, setPartnerUser, isDemoMode: isDemo } = useAuthStore();
+  const coupleId = couple?.id;
   const { isPartnerOnline, partnerTyping, partnerRecording, partnerLastSeen } = usePresenceStore();
+  const minuteNow = useMinuteNow();
   const { startCall } = useCallStore();
   const queryClient = useQueryClient();
 
@@ -114,10 +117,15 @@ export const ChatView: React.FC = () => {
       }
     }, 120);
   };
-  const [nickname, setNickname] = useState(() =>
-    partnerUser.nickname ||
-    (typeof window !== 'undefined' ? localStorage.getItem('duo_nickname_partner') || '' : '')
-  );
+  const sharedNickname = couple?.nicknames?.[partnerUser.id];
+  const [localNickname, setLocalNickname] = useState<string | null>(null);
+  const nickname =
+    localNickname !== null
+      ? localNickname
+      : sharedNickname !== undefined
+      ? sharedNickname
+      : partnerUser.nickname ||
+        (typeof window !== 'undefined' ? localStorage.getItem('duo_nickname_partner') || '' : '');
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
   const [showActiveStatus, setShowActiveStatus] = useState(() =>
     typeof window === 'undefined' ? true : localStorage.getItem('duo_show_active_status') !== 'false'
@@ -130,14 +138,6 @@ export const ChatView: React.FC = () => {
   );
   const [swipeState, setSwipeState] = useState<{ id: string; x: number; armed: boolean } | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const sharedNickname = couple?.nicknames?.[partnerUser.id];
-    if (sharedNickname !== undefined) {
-      setNickname(sharedNickname);
-      setNicknameDraft(sharedNickname);
-    }
-  }, [couple?.nicknames, partnerUser.id]);
 
   // Drag and Drop state
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -206,10 +206,14 @@ export const ChatView: React.FC = () => {
   // Clear optimistic messages once they appear in the firestore stream
   useEffect(() => {
     if (optimisticMessages.length === 0) return;
-    setOptimisticMessages((prev) =>
-      reconcileOptimisticMessages(prev, paginatedFirestoreMessages)
-    );
-  }, [paginatedFirestoreMessages, optimisticMessages.length]);
+    const remaining = reconcileOptimisticMessages(optimisticMessages, paginatedFirestoreMessages);
+    if (remaining.length !== optimisticMessages.length) {
+      const timer = window.setTimeout(() => {
+        setOptimisticMessages(remaining);
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
+  }, [paginatedFirestoreMessages, optimisticMessages]);
 
   const messages: ChatMessage[] = useMemo(() => {
     const rawList = isDemo ? demoMessages : paginatedFirestoreMessages;
@@ -323,7 +327,9 @@ export const ChatView: React.FC = () => {
   }, [messages, currentUser.id]);
 
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   // Track the most recent unread partner message ID to prevent unnecessary loops
   const latestUnreadPartnerMsgId = useMemo(() => {
@@ -345,8 +351,8 @@ export const ChatView: React.FC = () => {
     }
 
     // Only mark unread notifications as read if unreadCount > 0
-    if (couple?.id && useNotificationStore.getState().unreadCount > 0) {
-      useNotificationStore.getState().markAllAsRead(couple.id);
+    if (coupleId && useNotificationStore.getState().unreadCount > 0) {
+      useNotificationStore.getState().markAllAsRead(coupleId);
     }
     if (typeof navigator !== 'undefined' && 'clearAppBadge' in navigator) {
       try {
@@ -373,15 +379,15 @@ export const ChatView: React.FC = () => {
     const idsToMark = unreadPartnerMsgs.map((m) => m.id);
     idsToMark.forEach((id) => markingReadRef.current.add(id));
 
-    if (!isDemo && couple?.id) {
-      markMessagesRead(couple.id, idsToMark).catch(() => {
+    if (!isDemo && coupleId) {
+      markMessagesRead(coupleId, idsToMark).catch(() => {
         idsToMark.forEach((id) => markingReadRef.current.delete(id));
       });
     } else {
       duoDataStore.markMessagesRead(idsToMark);
       queryClient.invalidateQueries({ queryKey: ['messages'] });
     }
-  }, [currentUser.id, isDemo, couple?.id, queryClient]);
+  }, [currentUser.id, isDemo, coupleId, queryClient]);
 
   // Only trigger when new unread partner message arrives
   useEffect(() => {
@@ -440,7 +446,7 @@ export const ChatView: React.FC = () => {
   const hasInitiallyScrolledRef = useRef(false);
   useEffect(() => {
     hasInitiallyScrolledRef.current = false;
-  }, [couple?.id]);
+  }, [coupleId]);
 
   useEffect(() => {
     if (messages.length > 0 && !hasInitiallyScrolledRef.current) {
@@ -475,17 +481,17 @@ export const ChatView: React.FC = () => {
   }, [scrollToBottom]);
 
   const handleBroadcastTyping = useCallback((isTyping: boolean) => {
-    broadcastEvent('TYPING_STATUS', { isTyping, isRecording: false }, currentUser.id, couple?.id || '');
-    if (!isDemo && couple?.id) {
-      updateTypingStatus(couple.id, currentUser.id, isTyping, false);
+    broadcastEvent('TYPING_STATUS', { isTyping, isRecording: false }, currentUser.id, coupleId || '');
+    if (!isDemo && coupleId) {
+      updateTypingStatus(coupleId, currentUser.id, isTyping, false);
     }
-  }, [currentUser.id, couple?.id, isDemo]);
+  }, [currentUser.id, coupleId, isDemo]);
 
   useEffect(() => {
     const handleUnload = () => {
-      broadcastEvent('TYPING_STATUS', { isTyping: false, isRecording: false }, currentUser.id, couple?.id || '');
-      if (!isDemo && couple?.id) {
-        updateTypingStatus(couple.id, currentUser.id, false, false);
+      broadcastEvent('TYPING_STATUS', { isTyping: false, isRecording: false }, currentUser.id, coupleId || '');
+      if (!isDemo && coupleId) {
+        updateTypingStatus(coupleId, currentUser.id, false, false);
       }
     };
     window.addEventListener('beforeunload', handleUnload);
@@ -493,7 +499,7 @@ export const ChatView: React.FC = () => {
       window.removeEventListener('beforeunload', handleUnload);
       handleUnload();
     };
-  }, [currentUser.id, couple?.id, isDemo]);
+  }, [currentUser.id, coupleId, isDemo]);
 
   useEffect(() => {
     const staleCheck = window.setInterval(() => {
@@ -505,98 +511,111 @@ export const ChatView: React.FC = () => {
     return () => window.clearInterval(staleCheck);
   }, []);
 
-  const handleSendMessage = async (textToSend: string) => {
-    if (!textToSend.trim()) return;
+  const handleSendMessage = useCallback(
+    async (textToSend: string) => {
+      if (!textToSend.trim()) return;
 
-    soundManager.playPing();
-    const currentReply = replyTarget
-      ? {
-          messageId: replyTarget.id,
-          senderId: replyTarget.sender_id,
-          sender_name:
-            replyTarget.sender_id === currentUser.id ? 'You' : partnerUser.displayName,
-          type: replyTarget.message_type,
-          content: replyTarget.content,
-          snippet: replyTarget.content || 'Original message unavailable',
-          thumbnailUrl: replyTarget.media_url,
+      soundManager.playPing();
+      const currentReply = replyTarget
+        ? {
+            messageId: replyTarget.id,
+            senderId: replyTarget.sender_id,
+            sender_name:
+              replyTarget.sender_id === currentUser.id ? 'You' : partnerUser.displayName,
+            type: replyTarget.message_type,
+            content: replyTarget.content,
+            snippet: replyTarget.content || 'Original message unavailable',
+            thumbnailUrl: replyTarget.media_url,
+          }
+        : undefined;
+
+      setReplyTarget(null);
+      handleBroadcastTyping(false);
+
+      const tempId = `msg-${Date.now()}`;
+      const newMsg: ChatMessage = {
+        id: tempId,
+        couple_id: couple?.id || 'couple-duo-main',
+        sender_id: currentUser.id,
+        content: textToSend,
+        message_type: 'text',
+        reply_to: currentReply,
+        status: 'sending',
+        created_at: new Date().toISOString(),
+      };
+
+      if (!isDemo && couple?.id) {
+        setOptimisticMessages((prev) => [...prev, newMsg]);
+        shouldStickToBottomRef.current = true;
+        setShowJumpToBottom(false);
+        setTimeout(() => scrollToBottom('smooth'), 20);
+        setTimeout(() => scrollToBottom('smooth'), 120);
+
+        try {
+          await sendMessage(couple.id, {
+            clientId: tempId,
+            senderId: currentUser.id,
+            content: textToSend,
+            messageType: 'text',
+            ...(currentReply
+              ? {
+                  replyTo: {
+                    messageId: currentReply.messageId,
+                    senderId: currentReply.senderId,
+                    senderName: currentReply.sender_name,
+                    type: replyTarget?.message_type || 'text',
+                    snippet: currentReply.content || 'Original message unavailable',
+                    thumbnailUrl: replyTarget?.media_url,
+                  },
+                }
+              : {}),
+            status: 'sent',
+          });
+
+          setOptimisticMessages((prev) =>
+            prev.map((m) => (m.id === tempId ? { ...m, status: 'sent' as const } : m))
+          );
+          setTimeout(() => scrollToBottom('smooth'), 40);
+
+          // Trigger real-time pop-up notification for partner
+          useNotificationStore.getState().sendNotification({
+            coupleId: couple.id,
+            senderId: currentUser.id,
+            senderName: currentUser.displayName,
+            type: 'message',
+            title: currentUser.displayName,
+            body: textToSend,
+            deepLink: '/?action=chat',
+          });
+        } catch (err) {
+          setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
+          console.error('Firestore message send failed:', err);
+          if (inputRef.current) inputRef.current.value = textToSend;
+          window.alert('Message could not be sent. Please check your connection and try again.');
+          return;
         }
-      : undefined;
-
-    setReplyTarget(null);
-    handleBroadcastTyping(false);
-
-    const tempId = `msg-${Date.now()}`;
-    const newMsg: ChatMessage = {
-      id: tempId,
-      couple_id: couple?.id || 'couple-duo-main',
-      sender_id: currentUser.id,
-      content: textToSend,
-      message_type: 'text',
-      reply_to: currentReply,
-      status: 'sending',
-      created_at: new Date().toISOString(),
-    };
-
-    if (!isDemo && couple?.id) {
-      setOptimisticMessages((prev) => [...prev, newMsg]);
-      shouldStickToBottomRef.current = true;
-      setShowJumpToBottom(false);
-      setTimeout(() => scrollToBottom('smooth'), 20);
-      setTimeout(() => scrollToBottom('smooth'), 120);
-
-      try {
-        await sendMessage(couple.id, {
-          clientId: tempId,
-          senderId: currentUser.id,
-          content: textToSend,
-          messageType: 'text',
-          ...(currentReply
-            ? {
-                replyTo: {
-                  messageId: currentReply.messageId,
-                  senderId: currentReply.senderId,
-                  senderName: currentReply.sender_name,
-                  type: replyTarget?.message_type || 'text',
-                  snippet: currentReply.content || 'Original message unavailable',
-                  thumbnailUrl: replyTarget?.media_url,
-                },
-              }
-            : {}),
-          status: 'sent',
-        });
-
-        setOptimisticMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, status: 'sent' as const } : m))
-        );
-        setTimeout(() => scrollToBottom('smooth'), 40);
-
-        // Trigger real-time pop-up notification for partner
-        useNotificationStore.getState().sendNotification({
-          coupleId: couple.id,
-          senderId: currentUser.id,
-          senderName: currentUser.displayName,
-          type: 'message',
-          title: currentUser.displayName,
-          body: textToSend,
-          deepLink: '/?action=chat',
-        });
-      } catch (err) {
-        setOptimisticMessages((prev) => prev.filter((m) => m.id !== tempId));
-        console.error('Firestore message send failed:', err);
-        if (inputRef.current) inputRef.current.value = textToSend;
-        window.alert('Message could not be sent. Please check your connection and try again.');
-        return;
+      } else {
+        const currentMessages = duoDataStore.getMessages();
+        const updated = [...currentMessages, { ...newMsg, status: 'sent' as const }];
+        duoDataStore.saveMessages(updated);
+        broadcastEvent('MESSAGE_SENT', newMsg, currentUser.id, couple?.id || '');
       }
-    } else {
-      const currentMessages = duoDataStore.getMessages();
-      const updated = [...currentMessages, { ...newMsg, status: 'sent' as const }];
-      duoDataStore.saveMessages(updated);
-      broadcastEvent('MESSAGE_SENT', newMsg, currentUser.id, couple?.id || '');
-    }
 
-    queryClient.invalidateQueries({ queryKey: ['messages'] });
-    setTimeout(() => scrollToBottom('smooth'), 50);
-  };
+      queryClient.invalidateQueries({ queryKey: ['messages'] });
+      setTimeout(() => scrollToBottom('smooth'), 50);
+    },
+    [
+      replyTarget,
+      currentUser.id,
+      currentUser.displayName,
+      partnerUser.displayName,
+      handleBroadcastTyping,
+      couple,
+      isDemo,
+      scrollToBottom,
+      queryClient,
+    ]
+  );
 
   const handleSendAttachments = async (attachments: FileAttachment[], caption?: string) => {
     soundManager.playPing();
@@ -858,64 +877,71 @@ export const ChatView: React.FC = () => {
     }
   };
 
-  const handleReact = async (msgId: string, emoji: string) => {
-    const settings = soundEngine.getSettings();
-    soundEngine.play(settings.reactionSoundId || 'msg-bubble', { force: true });
+  const handleReact = useCallback(
+    async (msgId: string, emoji: string) => {
+      const settings = soundEngine.getSettings();
+      soundEngine.play(settings.reactionSoundId || 'msg-bubble', { force: true });
 
-    if (!couple?.id || !currentUser?.id) return;
+      if (!coupleId || !currentUser?.id) return;
 
-    // Optimistically update reactions map locally
-    setSpaceReactions((prev) => {
-      const msgR = { ...(prev[msgId] || {}) };
-      const currentUsers = msgR[emoji] || [];
-      const hasMe = currentUsers.includes(currentUser.id);
-      if (hasMe) {
-        msgR[emoji] = currentUsers.filter((u) => u !== currentUser.id);
-        if (msgR[emoji].length === 0) delete msgR[emoji];
-      } else {
-        // Clean user from other emojis on this message
-        for (const [em, uList] of Object.entries(msgR)) {
-          if (uList.includes(currentUser.id)) {
-            msgR[em] = uList.filter((u) => u !== currentUser.id);
-            if (msgR[em].length === 0) delete msgR[em];
+      // Optimistically update reactions map locally
+      setSpaceReactions((prev) => {
+        const msgR = { ...(prev[msgId] || {}) };
+        const currentVal = msgR[emoji];
+        const currentUsers = Array.isArray(currentVal) ? currentVal : [];
+        const hasMe = currentUsers.includes(currentUser.id);
+        if (hasMe) {
+          msgR[emoji] = currentUsers.filter((u) => u !== currentUser.id);
+          if (msgR[emoji].length === 0) delete msgR[emoji];
+        } else {
+          // Clean user from other emojis on this message
+          for (const [em, uList] of Object.entries(msgR)) {
+            if (Array.isArray(uList) && uList.includes(currentUser.id)) {
+              msgR[em] = uList.filter((u) => u !== currentUser.id);
+              if (msgR[em].length === 0) delete msgR[em];
+            }
           }
+          msgR[emoji] = [...currentUsers, currentUser.id];
         }
-        msgR[emoji] = [...currentUsers, currentUser.id];
-      }
-      return { ...prev, [msgId]: msgR };
-    });
-
-    try {
-      await toggleMessageReaction({
-        spaceId: couple.id,
-        messageId: msgId,
-        userId: currentUser.id,
-        userName: currentUser.displayName,
-        emoji,
-        currentReactions: spaceReactions[msgId] || {},
+        return { ...prev, [msgId]: msgR };
       });
-    } catch (err) {
-      console.warn('[ChatView] Reaction update error:', err);
-    }
 
-    setSelectedReactionMsgId(null);
-    setShowFullEmojiPicker(false);
-  };
+      try {
+        await toggleMessageReaction({
+          spaceId: coupleId,
+          messageId: msgId,
+          userId: currentUser.id,
+          userName: currentUser.displayName,
+          emoji,
+          currentReactions: spaceReactions[msgId] || {},
+        });
+      } catch (err) {
+        console.warn('[ChatView] Reaction update error:', err);
+      }
 
-  const handleBubbleClick = (msgId: string) => {
-    const now = Date.now();
-    if (
-      lastTapTimeRef.current &&
-      lastTapTimeRef.current.id === msgId &&
-      now - lastTapTimeRef.current.time < 350
-    ) {
-      // Double tap detected -> instant heart reaction
-      handleReact(msgId, '❤️');
-      lastTapTimeRef.current = null;
-    } else {
-      lastTapTimeRef.current = { id: msgId, time: now };
-    }
-  };
+      setSelectedReactionMsgId(null);
+      setShowFullEmojiPicker(false);
+    },
+    [coupleId, currentUser.id, currentUser.displayName, spaceReactions]
+  );
+
+  const handleBubbleClick = useCallback(
+    (msgId: string) => {
+      const now = Date.now();
+      if (
+        lastTapTimeRef.current &&
+        lastTapTimeRef.current.id === msgId &&
+        now - lastTapTimeRef.current.time < 350
+      ) {
+        // Double tap detected -> instant heart reaction
+        handleReact(msgId, '❤️');
+        lastTapTimeRef.current = null;
+      } else {
+        lastTapTimeRef.current = { id: msgId, time: now };
+      }
+    },
+    [handleReact]
+  );
 
   const handleBubbleTouchStart = (msgId: string, event?: React.TouchEvent) => {
     void event;
@@ -989,7 +1015,7 @@ export const ChatView: React.FC = () => {
 
   const formatLastSeen = () => {
     if (!partnerLastSeen) return 'Active recently';
-    const minutes = Math.max(1, Math.round((Date.now() - partnerLastSeen) / 60000));
+    const minutes = Math.max(1, Math.round((minuteNow.getTime() - partnerLastSeen) / 60000));
     if (minutes < 60) return `Active ${minutes} min ago`;
     return `Active today at ${formatTimeOnly(new Date(partnerLastSeen).toISOString(), currentUser.timezone)}`;
   };
@@ -1081,25 +1107,25 @@ export const ChatView: React.FC = () => {
         </div>
       )}
 
-      {/* Top Chat Partner Bar: Fixed at top like WhatsApp/Instagram */}
-      <div className="card p-2.5 sm:p-3.5 flex items-center justify-between mb-2 shrink-0 z-10 shadow-xs">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* Top Chat Partner Bar: Centered in available space & responsive */}
+      <div className="card w-full max-w-3xl mx-auto p-2 sm:p-3 flex items-center justify-between mb-1.5 shrink-0 z-10 shadow-xs">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <div className="relative shrink-0">
             <img
               src={partnerUser.avatarUrl}
               alt={partnerUser.displayName}
-              className="w-11 h-11 rounded-2xl object-cover border-2 border-[var(--partner-b)] shadow-xs"
+              className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl object-cover border-2 border-[var(--partner-b)] shadow-xs"
             />
             {isPartnerOnline && showActiveStatus && (
-              <div className="presence-dot absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-[var(--success)] border-2 border-[var(--surface)]" />
+              <div className="presence-dot absolute -bottom-1 -right-1 w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-[var(--success)] border-2 border-[var(--surface)]" />
             )}
           </div>
-          <div className="min-w-0">
-            <div className="text-base font-chunky font-bold text-[var(--text)] flex items-center gap-1.5 leading-tight truncate">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm sm:text-base font-heading font-normal text-[var(--text)] flex items-center gap-1.5 leading-tight truncate">
               <span>{nickname || partnerUser.displayName}</span>
-              <Sparkles className="w-4 h-4 text-[var(--accent)] shrink-0" />
+              <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
             </div>
-            <div className="font-ui text-xs font-medium text-[var(--text-muted)] truncate" aria-live="polite">
+            <div className="font-ui text-[11px] sm:text-xs font-medium text-[var(--text-muted)] truncate" aria-live="polite">
               {partnerTyping && showActiveStatus ? (
                 <span className="text-[var(--partner-a)] font-semibold animate-pulse">
                   {nickname || partnerUser.displayName} is {partnerRecording ? 'recording audio…' : 'typing…'}
@@ -1178,7 +1204,7 @@ export const ChatView: React.FC = () => {
                 </label>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => {
-                    setNickname('');
+                    setLocalNickname('');
                     setNicknameDraft('');
                     setPartnerUser({
                       displayName: partnerUser.realDisplayName || partnerUser.displayName,
@@ -1193,7 +1219,7 @@ export const ChatView: React.FC = () => {
                   }} className="flex-1 rounded-xl border-2 border-[var(--border)] px-3 py-2 font-ui text-sm text-[var(--text)]">Clear nickname</button>
                   <button type="button" onClick={() => {
                     const next = nicknameDraft.trim();
-                    setNickname(next);
+                    setLocalNickname(next);
                     setPartnerUser({
                       displayName: next || partnerUser.realDisplayName || partnerUser.displayName,
                       nickname: next,
@@ -1213,18 +1239,18 @@ export const ChatView: React.FC = () => {
           )}
         </div>
 
-        {/* Quick Call Action Buttons (44px tap targets) */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Quick Call Action Buttons (Touch targets with responsive sizing) */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setShowStarredModal(true)}
             title="Starred messages"
             aria-label="View starred messages"
-            className="relative w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="relative w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl sm:rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
           >
-            <Star className={`w-4 h-4 ${starredList.length > 0 ? 'text-amber-500 fill-amber-400' : 'text-[var(--text)]'}`} />
+            <Star className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${starredList.length > 0 ? 'text-amber-500 fill-amber-400' : 'text-[var(--text)]'}`} />
             {starredList.length > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-500 text-white font-ui text-[10px] font-bold flex items-center justify-center shadow-xs">
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-0.5 rounded-full bg-amber-500 text-white font-ui text-[9px] font-bold flex items-center justify-center shadow-xs">
                 {starredList.length > 99 ? '99+' : starredList.length}
               </span>
             )}
@@ -1237,33 +1263,34 @@ export const ChatView: React.FC = () => {
             }}
             title="Chat settings"
             aria-label="Open chat settings"
-            className="w-11 h-11 min-w-[44px] rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl sm:rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] transition-all cursor-pointer flex items-center justify-center shrink-0"
           >
-            <MoreVertical className="w-4 h-4" />
+            <MoreVertical className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => startCall('audio', true)}
             title="Start Audio Call"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl sm:rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 text-[var(--text)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
           >
-            <Phone className="w-4 h-4" />
+            <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => startCall('video', true)}
             title="Start Video Call"
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-2xl bg-[var(--partner-a)] text-white border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
+            className="w-9 h-9 sm:w-10 sm:h-10 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] rounded-xl sm:rounded-2xl bg-[var(--partner-a)] text-white border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center justify-center shrink-0"
           >
-            <Video className="w-4 h-4" />
+            <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
       </div>
 
-      {/* Messages Scroll Area (A7: flex 1, min-height 0, themed thin scrollbar at edge) */}
+      {/* Messages Scroll Area (A7: flex 1, min-height 0, themed thin scrollbar at edge, centered column) */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-0 overflow-y-auto chat-messages-scroll p-3 sm:p-4 space-y-1.5"
+        className="flex-1 min-h-0 w-full overflow-y-auto chat-messages-scroll p-2 sm:p-4"
       >
+        <div className="max-w-3xl mx-auto w-full space-y-2 flex flex-col">
         {/* Top Loading Spinner */}
         {isLoadingEarlier && (
           <div className="flex items-center justify-center py-4 text-[var(--text-muted)] animate-in fade-in">
@@ -1302,7 +1329,7 @@ export const ChatView: React.FC = () => {
           <div key={group.dateKey} className="space-y-1.5">
             {/* Sticky Day Separator Badge */}
             <div className="flex items-center justify-center my-3 sticky top-1 z-10 pointer-events-none">
-              <span className="px-3.5 py-1 rounded-full bg-[var(--surface-2)]/95 backdrop-blur-md text-[var(--text-muted)] text-[11px] font-ui font-bold border border-[var(--border)] shadow-xs pointer-events-auto">
+              <span className="sep pointer-events-auto">
                 {group.label}
               </span>
             </div>
@@ -1344,12 +1371,12 @@ export const ChatView: React.FC = () => {
                     e.preventDefault();
                     setContextMenuMsgId(contextMenuMsgId === msg.id ? null : msg.id);
                   }}
-                  className={`relative max-w-[min(75%,520px)] rounded-2xl px-4 py-2.5 text-[15px] font-body transition-all border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] ${
+                  className={`m ${isMe ? 'me' : ''} relative text-[15px] font-body transition-all border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] ${
                     isDeletedEveryone
                       ? 'bg-[var(--surface-2)] text-[var(--text-muted)] italic'
                       : isMe
-                      ? 'bg-[var(--partner-a)] text-white rounded-tr-sm'
-                      : 'bg-[var(--surface-2)] text-[var(--text)] rounded-tl-sm'
+                      ? 'bg-[var(--partner-a)] text-white'
+                      : 'bg-[var(--surface-2)] text-[var(--text)]'
                   }`}
                   role="button"
                   tabIndex={0}
@@ -1688,8 +1715,20 @@ export const ChatView: React.FC = () => {
 
                 {/* Reactions Chips under bubble */}
                 {(() => {
-                  const reactions = spaceReactions[msg.id] || msg.reactions || {};
-                  const entries = Object.entries(reactions).filter(([_, u]) => u && u.length > 0);
+                  const rawReactions = spaceReactions[msg.id] || msg.reactions || {};
+                  const entries = Object.entries(rawReactions)
+                    .map(([emoji, val]) => {
+                      const userIds: string[] = Array.isArray(val)
+                        ? val
+                        : typeof val === 'string'
+                        ? [val]
+                        : typeof val === 'object' && val !== null
+                        ? Object.keys(val).filter((k) => Boolean((val as Record<string, any>)[k]))
+                        : [];
+                      return [emoji, userIds] as [string, string[]];
+                    })
+                    .filter(([, userIds]) => userIds.length > 0);
+
                   if (entries.length === 0) return null;
 
                   return (
@@ -1744,6 +1783,7 @@ export const ChatView: React.FC = () => {
             <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>
           </div>
         )}
+        </div>
       </div>
 
       {/* Floating Jump To New Messages Button (A7) */}
@@ -1755,7 +1795,7 @@ export const ChatView: React.FC = () => {
             setShowJumpToBottom(false);
             setHasNewIncoming(false);
           }}
-          className={`absolute bottom-24 right-4 px-3.5 py-1.5 rounded-full border-2 text-xs flex items-center gap-1.5 cursor-pointer z-30 transition-all shadow-md active:scale-95 ${
+          className={`absolute bottom-24 right-4 sm:right-[max(1rem,calc((100%-48rem)/2+1rem))] px-3.5 py-1.5 rounded-full border-2 text-xs flex items-center gap-1.5 cursor-pointer z-30 transition-all shadow-md active:scale-95 ${
             hasNewIncoming
               ? 'bg-[var(--partner-a)] text-white border-[var(--border)] font-bold shadow-lg animate-bounce'
               : 'bg-[var(--surface)] border-[var(--border)] text-[var(--text)] font-ui font-semibold shadow-[0_3px_0_var(--shadow-color)]'
@@ -1768,23 +1808,25 @@ export const ChatView: React.FC = () => {
       )}
 
       {/* Isolated High-Performance Chat Input Composer */}
-      <ChatInputComposer
-        partnerName={nickname || partnerUser.displayName}
-        spaceId={couple?.id || 'couple-duo-main'}
-        currentUserId={currentUser.id}
-        replyTarget={replyTarget}
-        onClearReply={() => setReplyTarget(null)}
-        onSendMessage={handleSendMessage}
-        onSendAttachments={handleSendAttachments}
-        onBroadcastTyping={handleBroadcastTyping}
-        isVoiceUploading={isVoiceUploading}
-        isRecording={isRecording}
-        recordDuration={recordDuration}
-        micLevel={micLevel}
-        onStartRecording={handleStartRecording}
-        onStopRecording={handleStopRecording}
-        externalInputRef={inputRef}
-      />
+      <div className="w-full max-w-3xl mx-auto mt-auto shrink-0 z-10">
+        <ChatInputComposer
+          partnerName={nickname || partnerUser.displayName}
+          spaceId={couple?.id || 'couple-duo-main'}
+          currentUserId={currentUser.id}
+          replyTarget={replyTarget}
+          onClearReply={() => setReplyTarget(null)}
+          onSendMessage={handleSendMessage}
+          onSendAttachments={handleSendAttachments}
+          onBroadcastTyping={handleBroadcastTyping}
+          isVoiceUploading={isVoiceUploading}
+          isRecording={isRecording}
+          recordDuration={recordDuration}
+          micLevel={micLevel}
+          onStartRecording={handleStartRecording}
+          onStopRecording={handleStopRecording}
+          externalInputRef={inputRef}
+        />
+      </div>
 
       {/* WhatsApp-Style Starred Messages View Modal */}
       <StarredMessagesModal

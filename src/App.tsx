@@ -20,6 +20,7 @@ import { soundEngine } from './lib/sounds';
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 import { ThemeProvider } from './lib/theme';
+import { AvLoadingScreen } from './components/AvLoadingScreen';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,7 +84,7 @@ function AppInner() {
             displayName: profile.displayName || user.displayName || 'Aryan',
             realDisplayName: profile.displayName || user.displayName || 'Aryan',
             avatarUrl: profile.avatarUrl || user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`,
-            theme: (profile.theme as any) || 'cozy-cream',
+            theme: (profile.theme as any) || 'hazard',
             moodStatus: profile.moodStatus || 'Welcome to AV ✨',
           });
 
@@ -123,7 +124,7 @@ function AppInner() {
             displayName: initialDisplayName,
             realDisplayName: initialDisplayName,
             avatarUrl: initialAvatar,
-            theme: 'midnight',
+            theme: 'hazard',
             moodStatus: 'Welcome to AV ✨',
           });
           setDoc(
@@ -241,10 +242,19 @@ function AppInner() {
     initOneSignal(currentUser.id).catch(() => {});
   }, [currentUser?.id, isDemoMode]);
 
-  // Initialize notifications collection listener once paired
+  // Initialize notifications collection listener once paired with reliable cleanup
   useEffect(() => {
-    if (isDemoMode || !couple?.id || !currentUser?.id) return;
-    useNotificationStore.getState().initNotifications(currentUser.id, couple.id);
+    if (isDemoMode || !couple?.id || !currentUser?.id) {
+      useNotificationStore.getState().cleanupNotifications();
+      return;
+    }
+    const unsub = useNotificationStore.getState().initNotifications(currentUser.id, couple.id);
+    return () => {
+      if (typeof unsub === 'function') {
+        unsub();
+      }
+      useNotificationStore.getState().cleanupNotifications();
+    };
   }, [couple?.id, currentUser?.id, isDemoMode]);
 
   // Clear mobile PWA app badge on foreground wakeup; only reconnect Firestore on network recovery
@@ -354,38 +364,7 @@ function AppInner() {
 
   // Loading state while checking credentials
   if (authLoading && !isDemoMode) {
-    return (
-      <div className="min-h-screen bg-[var(--bg)] flex flex-col items-center justify-center text-[var(--text)] transition-colors select-none relative overflow-hidden">
-        {/* Subtle theme aura glow in background */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-25"
-          style={{
-            background: 'radial-gradient(circle at 50% 45%, var(--accent) 0%, var(--partner-a) 25%, transparent 65%)',
-          }}
-        />
-
-        {/* Floating AV Emblem Card */}
-        <div className="relative z-10 w-22 h-22 rounded-3xl bg-[var(--surface)] border-3 border-[var(--border)] shadow-[0_6px_0_var(--shadow-color)] mb-5 p-4 flex items-center justify-center ring-4 ring-[var(--accent)]/20 animate-pulse transition-transform hover:scale-105">
-          <img src="/logo.svg" alt="AV" className="w-full h-full object-contain drop-shadow-xs" />
-        </div>
-
-        <div className="relative z-10 flex flex-col items-center gap-1">
-          <span className="font-chunky font-bold text-lg text-[var(--text)] tracking-wider">
-            Opening AV...
-          </span>
-          <span className="font-ui text-xs font-semibold text-[var(--text-muted)] tracking-wide">
-            Aryan & Vidhi ✨
-          </span>
-        </div>
-
-        {/* 3-dot theme loader matching Partner A, Accent, and Partner B */}
-        <div className="relative z-10 flex items-center gap-2.5 mt-5" aria-label="Loading animation">
-          <span className="w-3 h-3 rounded-full bg-[var(--partner-a)] border border-[var(--border)] animate-bounce shadow-xs" style={{ animationDelay: '0ms' }} />
-          <span className="w-3 h-3 rounded-full bg-[var(--accent)] border border-[var(--border)] animate-bounce shadow-xs" style={{ animationDelay: '150ms' }} />
-          <span className="w-3 h-3 rounded-full bg-[var(--partner-b)] border border-[var(--border)] animate-bounce shadow-xs" style={{ animationDelay: '300ms' }} />
-        </div>
-      </div>
-    );
+    return <AvLoadingScreen />;
   }
 
   // Not logged in and not in demo mode -> Show Login Screen!

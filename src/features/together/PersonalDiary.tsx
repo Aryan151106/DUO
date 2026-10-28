@@ -43,6 +43,17 @@ const WRITING_PROMPTS = [
   'How are your mind, heart, and body feeling right now?',
 ];
 
+const formatDiaryDate = (dateVal?: string, fmt = 'MMM d, yyyy'): string => {
+  if (!dateVal) return 'Today';
+  try {
+    const d = parseISO(dateVal);
+    if (isNaN(d.getTime())) return dateVal;
+    return format(d, fmt);
+  } catch {
+    return dateVal;
+  }
+};
+
 export const PersonalDiary: React.FC = () => {
   const { currentUser, partnerUser, couple, isDemoMode } = useAuthStore();
 
@@ -350,7 +361,7 @@ export const PersonalDiary: React.FC = () => {
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-1.5 text-xs font-numeric font-bold text-[var(--text-muted)]">
                     <Calendar className="w-3.5 h-3.5 text-[var(--partner-a)]" />
-                    <span>{format(parseISO(entry.date || entry.createdAt), 'MMM d, yyyy')}</span>
+                    <span>{formatDiaryDate(entry.date || entry.createdAt, 'MMM d, yyyy')}</span>
                   </div>
                   {entry.mood && (
                     <span className="px-2 py-0.5 rounded-full text-[11px] font-ui font-bold bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)]">
@@ -428,7 +439,7 @@ export const PersonalDiary: React.FC = () => {
                 <div className="flex items-center gap-2 mb-1.5">
                   <span className="text-xs font-numeric font-bold text-[var(--partner-a)] flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5" />
-                    <span>{format(parseISO(readingEntry.date || readingEntry.createdAt), 'EEEE, MMMM d, yyyy')}</span>
+                    <span>{formatDiaryDate(readingEntry.date || readingEntry.createdAt, 'EEEE, MMMM d, yyyy')}</span>
                   </span>
                   {readingEntry.mood && (
                     <span className="px-2.5 py-0.5 rounded-full text-xs font-ui font-bold bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text)]">

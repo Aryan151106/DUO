@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuthStore, usePresenceStore, useCallStore } from '../lib/store';
 import { soundManager } from '../lib/sound';
 import { useTheme } from '../lib/theme';
-import { Video, RefreshCw, Sun, Moon, Sparkles, Download } from 'lucide-react';
+import { GoogleIcon } from '../components/GoogleIcon';
 import { isInQuietHours } from '../lib/time';
 import { useNow } from '../lib/useNow';
 import { formatTimeOnly, formatFriendlyDate } from '../lib/format';
@@ -66,8 +66,8 @@ export const Header: React.FC = () => {
               <span className="hidden sm:inline">
                 • {friendlyDateStr}
               </span>
-              {isQuiet && <Moon className="w-3.5 h-3.5 text-amber-500 inline shrink-0" />}
-              {partnerTyping && <Sparkles className="w-3.5 h-3.5 text-[var(--accent)] animate-spin inline shrink-0" />}
+              {isQuiet && <GoogleIcon name="bedtime" size={14} className="text-amber-500 inline shrink-0" />}
+              {partnerTyping && <GoogleIcon name="auto_awesome" size={14} className="text-[var(--accent)] animate-spin inline shrink-0" />}
             </div>
           </div>
         </div>
@@ -83,9 +83,9 @@ export const Header: React.FC = () => {
             aria-label="Toggle light or dark theme"
           >
             {resolvedMode === 'dark' ? (
-              <Sun className="w-4 h-4 text-amber-400" />
+              <GoogleIcon name="light_mode" size={18} className="text-amber-400" />
             ) : (
-              <Moon className="w-4 h-4 text-indigo-500" />
+              <GoogleIcon name="dark_mode" size={18} className="text-indigo-500" />
             )}
           </button>
 
@@ -97,7 +97,7 @@ export const Header: React.FC = () => {
               className="h-11 min-h-[44px] px-3.5 rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer flex items-center gap-1.5 shrink-0"
               aria-label={`Switch persona to ${partnerUser.displayName}`}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <GoogleIcon name="sync" size={15} />
               <span className="hidden sm:inline">Switch to {partnerUser.displayName}</span>
               <span className="sm:hidden">{partnerUser.displayName}</span>
             </button>
@@ -111,7 +111,7 @@ export const Header: React.FC = () => {
             className="h-11 min-h-[44px] px-3 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 border-2 border-[var(--border)] text-[var(--text)] flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer shrink-0 font-ui text-xs font-bold"
             aria-label="Download and install AV app"
           >
-            <Download className="w-4 h-4 stroke-[2.2] text-[var(--accent)]" />
+            <GoogleIcon name="download" size={18} className="text-[var(--accent)]" />
             <span className="hidden sm:inline">GET APP</span>
           </button>
 
@@ -122,7 +122,7 @@ export const Header: React.FC = () => {
             title={isDemoMode ? 'Demo video room' : 'Open video room'}
             aria-label={isDemoMode ? 'Start demo video room' : 'Open video room'}
           >
-            <Video className="w-4 h-4" />
+            <GoogleIcon name="videocam" size={20} />
           </button>
         </div>
       </div>

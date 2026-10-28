@@ -89,6 +89,8 @@ export const SettingsModal: React.FC = () => {
     setTimeFormat,
     firstDayOfWeek,
     setFirstDayOfWeek,
+    setTab,
+    setTogetherSubTab,
   } = useAuthStore();
 
   const [copiedCode, setCopiedCode] = useState(false);
@@ -240,12 +242,12 @@ export const SettingsModal: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-[1500px] mx-auto pb-28 pt-2">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+    <div className="w-full max-w-[1500px] mx-auto px-2.5 sm:px-4 md:px-6 pb-28 pt-2 min-w-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
         {/* 1. THEME & APPEARANCE */}
-      <section className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
-        <div className="flex items-start gap-3 mb-5 pb-4 border-b-2 border-[var(--border)]">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+      <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
+        <div className="flex items-start gap-3 mb-4 sm:mb-5 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
+          <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
             <Sparkles className="w-5 h-5" />
           </div>
           <div>
@@ -256,10 +258,10 @@ export const SettingsModal: React.FC = () => {
           </div>
         </div>
         <ThemeChooser />
-        <label className="mt-5 flex items-center justify-between gap-3 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 font-ui text-sm text-[var(--text)]">
-          <span>
+        <label className="mt-4 sm:mt-5 flex items-center justify-between gap-3 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3.5 sm:px-4 sm:py-3 font-ui text-sm text-[var(--text)]">
+          <span className="min-w-0">
             <span className="block font-bold">Show my active status</span>
-            <span className="block text-xs text-[var(--text-muted)]">Let your crew see when you are online.</span>
+            <span className="block text-xs text-[var(--text-muted)] truncate">Let your partner see when you are online.</span>
           </span>
           <input
             type="checkbox"
@@ -270,14 +272,15 @@ export const SettingsModal: React.FC = () => {
               localStorage.setItem('duo_show_active_status', String(enabled));
             }}
             aria-label="Show my active status"
+            className="shrink-0"
           />
         </label>
       </section>
 
       {/* 2. PRIVATE NOTES / DIARY */}
-      <section className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
-        <div className="flex items-start gap-3 mb-5 pb-4 border-b-2 border-[var(--border)]">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+      <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
+        <div className="flex items-start gap-3 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
+          <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
             <CalendarCheck className="w-5 h-5 text-[var(--accent)]" />
           </div>
           <div>
@@ -290,14 +293,30 @@ export const SettingsModal: React.FC = () => {
         <textarea
           value={privateNotes}
           onChange={(event) => handlePrivateNotesChange(event.target.value)}
-          rows={6}
+          rows={5}
           placeholder="Write a quick private reflection, idea, or personal note..."
-          className="w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 font-body text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] resize-none"
+          className="w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3 font-body text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] resize-none"
         />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+          <span className="font-clean text-[11px] text-[var(--text-muted)]">
+            Saved securely for you on this device.
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              soundEngine.play('msg-pop', { force: true });
+              setTab('together');
+              setTogetherSubTab('diary');
+            }}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky text-xs font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 min-h-[40px]"
+          >
+            <span>Open Full Personal Diary 📖</span>
+          </button>
+        </div>
       </section>
 
       {/* 3. TIME FORMAT & FIRST DAY OF WEEK */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
         <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
           <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
             <Clock className="w-5 h-5" />
@@ -371,9 +390,9 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 3. PROFILE & TIMEZONE SETTINGS */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
         <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
             <Globe className="w-5 h-5" />
           </div>
           <div>
@@ -385,7 +404,7 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block">
                 Current Timezone
@@ -404,7 +423,7 @@ export const SettingsModal: React.FC = () => {
                   updateProfile(currentUser.id, { timezone: detected }).catch(() => {});
                 }
               }}
-              className="px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] text-xs font-chunky font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer min-h-[44px]"
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] text-xs font-chunky font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer min-h-[44px] flex items-center justify-center"
             >
               Detect Device Timezone 📍
             </button>
@@ -458,10 +477,10 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 4. NOTIFICATIONS AND SOUNDS (PART E) */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-6">
-        <div className="flex items-center justify-between pb-3 border-b-2 border-[var(--border)]">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-5 sm:space-y-6 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-[var(--border)]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+            <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
               <Bell className="w-5 h-5" />
             </div>
             <div>
@@ -477,7 +496,7 @@ export const SettingsModal: React.FC = () => {
           <button
             type="button"
             onClick={() => updateSettings(DEFAULT_SOUND_SETTINGS)}
-            className="px-3 py-1.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface)] border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text)] transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px]"
+            className="self-start sm:self-auto px-3 py-1.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface)] border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text-muted)] hover:text-[var(--text)] transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px]"
             title="Reset to default audio settings"
           >
             <RotateCcw className="w-3.5 h-3.5" />
@@ -757,7 +776,7 @@ export const SettingsModal: React.FC = () => {
 
           {/* Message Volume Slider */}
           <div className="flex items-center justify-between gap-3 pt-2">
-            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] flex items-center gap-1.5 shrink-0">
               <Volume2 className="w-3.5 h-3.5" />
               <span>Volume</span>
             </span>
@@ -768,10 +787,10 @@ export const SettingsModal: React.FC = () => {
               step="0.05"
               value={soundSettings.messageVolume}
               onChange={(e) => updateSettings({ messageVolume: Number(e.target.value) })}
-              className="w-36 accent-[var(--accent)] cursor-pointer"
+              className="flex-1 min-w-[80px] max-w-[200px] accent-[var(--accent)] cursor-pointer"
               aria-label="Message tone volume"
             />
-            <span className="font-numeric text-xs font-bold text-[var(--text)] w-8 text-right">
+            <span className="font-numeric text-xs font-bold text-[var(--text)] w-8 text-right shrink-0">
               {Math.round(soundSettings.messageVolume * 100)}%
             </span>
           </div>
@@ -940,7 +959,7 @@ export const SettingsModal: React.FC = () => {
 
           {/* Call Volume Slider */}
           <div className="flex items-center justify-between gap-3 pt-2">
-            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] flex items-center gap-1.5">
+            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] flex items-center gap-1.5 shrink-0">
               <Volume2 className="w-3.5 h-3.5" />
               <span>Ringtone Volume</span>
             </span>
@@ -951,10 +970,10 @@ export const SettingsModal: React.FC = () => {
               step="0.05"
               value={soundSettings.callVolume}
               onChange={(e) => updateSettings({ callVolume: Number(e.target.value) })}
-              className="w-36 accent-[var(--accent)] cursor-pointer"
+              className="flex-1 min-w-[80px] max-w-[200px] accent-[var(--accent)] cursor-pointer"
               aria-label="Ringtone volume"
             />
-            <span className="font-numeric text-xs font-bold text-[var(--text)] w-8 text-right">
+            <span className="font-numeric text-xs font-bold text-[var(--text)] w-8 text-right shrink-0">
               {Math.round(soundSettings.callVolume * 100)}%
             </span>
           </div>
@@ -964,7 +983,7 @@ export const SettingsModal: React.FC = () => {
             <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block mb-1.5">
               Outgoing Ringback (what you hear while calling):
             </span>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {[
                 { id: 'ring-classic', label: 'Classic 📞' },
                 { id: 'ring-marimba', label: 'Marimba 🎵' },
@@ -1163,7 +1182,7 @@ export const SettingsModal: React.FC = () => {
             Non-urgent mission reminders wait until quiet hours end in your timezone.
           </p>
 
-          <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
               <label className="block font-clean text-xs font-semibold text-[var(--text-muted)] mb-1">
                 Quiet Starts
@@ -1191,7 +1210,7 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         {/* Profile & Period Tracking Role */}
-        <div className="p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] space-y-3">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-base">🌸</span>
             <h4 className="font-chunky text-xs font-bold text-[var(--text)]">
@@ -1202,7 +1221,7 @@ export const SettingsModal: React.FC = () => {
             Sets who logs period symptoms & cravings vs who receives alerts and care tips:
           </p>
 
-          <div className="flex rounded-xl bg-[var(--surface)] p-1 border-2 border-[var(--border)]">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 rounded-xl bg-[var(--surface)] p-1.5 border-2 border-[var(--border)]">
             {(
               [
                 { id: 'female', label: 'Vidhi (Cycle Tracker) 🌸' },
@@ -1217,7 +1236,7 @@ export const SettingsModal: React.FC = () => {
                   soundEngine.play('msg-pop', { force: true });
                   setCurrentUser({ gender: opt.id });
                 }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-ui font-bold transition-all cursor-pointer ${
+                className={`w-full py-2.5 px-3 rounded-lg text-xs font-ui font-bold transition-all cursor-pointer min-h-[40px] flex items-center justify-center text-center ${
                   currentUser.gender === opt.id
                     ? 'bg-[var(--partner-a)] text-white shadow-xs'
                     : 'text-[var(--text-muted)] hover:text-[var(--text)]'
@@ -1247,9 +1266,9 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 5. DESKTOP COMPANION WIDGET */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex items-center justify-between gap-4">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+          <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
             <Laptop className="w-5 h-5 text-[var(--partner-b)]" />
           </div>
           <div>
@@ -1263,7 +1282,7 @@ export const SettingsModal: React.FC = () => {
         <button
           type="button"
           onClick={openDedicatedPopout}
-          className="px-4 py-2.5 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer shrink-0 min-h-[44px]"
+          className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer shrink-0 min-h-[44px]"
         >
           <ExternalLink className="w-3.5 h-3.5 text-[var(--partner-a)]" />
           <span>Launch Popout</span>
@@ -1271,20 +1290,20 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 6. PAIRING & SECURITY STATUS */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
             <KeyRound className="w-5 h-5" />
           </div>
           <h2 className="text-xl font-chunky font-bold text-[var(--text)]">AV Private Space & Lock</h2>
         </div>
 
-        <div className="bg-[var(--surface-2)] border-2 border-[var(--border)] rounded-2xl p-4 flex items-center justify-between gap-4 mb-3">
+        <div className="bg-[var(--surface-2)] border-2 border-[var(--border)] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
           <div>
             <div className="font-clean text-xs text-[var(--text-muted)] uppercase font-semibold mb-0.5">
               Access Secret Code
             </div>
-            <div className="text-3xl font-numeric font-bold text-[var(--text)] tracking-widest">
+            <div className="text-2xl sm:text-3xl font-numeric font-bold text-[var(--text)] tracking-widest">
               {couple?.inviteCode || 'K7M2QX'}
             </div>
             <div className="font-clean text-xs text-[var(--partner-a)] font-bold mt-1">
@@ -1294,7 +1313,7 @@ export const SettingsModal: React.FC = () => {
 
           <button
             onClick={handleCopyCode}
-            className="px-4 py-2.5 rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
+            className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
           >
             {copiedCode ? <Check className="w-4 h-4 text-[var(--success)]" /> : <Copy className="w-4 h-4" />}
             <span>{copiedCode ? 'Copied! 🎉' : 'Copy Code'}</span>
@@ -1308,7 +1327,7 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 7. BACKUP & EXPORT */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex items-center justify-between">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
         <div>
           <h3 className="font-chunky font-bold text-base text-[var(--text)] mb-0.5">Export Our Journey</h3>
           <p className="font-clean text-xs text-[var(--text-muted)]">Download all our tasks, dreams, scores & chat logs</p>
@@ -1316,7 +1335,7 @@ export const SettingsModal: React.FC = () => {
 
         <button
           onClick={handleExportData}
-          className="px-5 py-2.5 rounded-2xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
+          className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
         >
           <Download className="w-4 h-4" />
           <span>Export JSON 📥</span>
@@ -1324,7 +1343,7 @@ export const SettingsModal: React.FC = () => {
       </div>
 
       {/* 8. DANGER ZONE: ACCOUNT & SIGN OUT */}
-      <div className="bg-[var(--surface)] rounded-3xl p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex items-center justify-between">
+      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
         <div>
           <h3 className="font-chunky font-bold text-base text-[var(--urgent)] mb-0.5">Danger Zone</h3>
           <p className="font-clean text-xs text-[var(--text-muted)]">
@@ -1337,7 +1356,7 @@ export const SettingsModal: React.FC = () => {
             await signOut();
             window.location.reload();
           }}
-          className="px-5 py-2.5 rounded-2xl bg-[var(--urgent)]/10 hover:bg-[var(--urgent)]/20 border-2 border-[var(--urgent)] text-[var(--urgent)] font-chunky font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-[0_2px_0_var(--urgent)] min-h-[44px]"
+          className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--urgent)]/10 hover:bg-[var(--urgent)]/20 border-2 border-[var(--urgent)] text-[var(--urgent)] font-chunky font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-[0_2px_0_var(--urgent)] min-h-[44px]"
         >
           <LogOut className="w-4 h-4" />
           <span>Log Out</span>

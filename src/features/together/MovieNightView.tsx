@@ -1,14 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import {
-  Film,
-  Moon,
-  Sun,
-  Sparkles,
-  MonitorUp,
-  LogOut,
-  MessageSquare,
-  Send,
-} from 'lucide-react';
+import { GoogleIcon } from '../../components/GoogleIcon';
 import {
   createTogetherRoom,
   joinTogetherRoom,
@@ -19,6 +10,7 @@ import {
 } from '../../lib/togetherRooms';
 import { useAuthStore } from '../../lib/store';
 import { soundEffects, soundManager } from '../../lib/sound';
+import { useMediaRoomStore } from '../../lib/mediaRoomStore';
 const LiveKitMediaRoom = React.lazy(() =>
   import('./LiveKitMediaRoom').then((m) => ({ default: m.LiveKitMediaRoom }))
 );
@@ -48,6 +40,14 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
   const activeRoomId = activeTogetherRoom?.roomId || (activeSession?.id ? String(activeSession.id) : null);
   const { room: durableRoom } = useTogetherRoomDoc(activeRoomId);
   const currentRoom = durableRoom || activeTogetherRoom;
+
+  // Persistent Media Room Store integration
+  const {
+    activeRoomInfo: persistentRoomInfo,
+    room: persistentRoom,
+    explicitlyLeftRoomIds,
+    clearExplicitlyLeft,
+  } = useMediaRoomStore();
 
   // 2. Real-time Socket.IO room coordination
   const {
@@ -89,12 +89,34 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
   // Floating Reactions
   const [reactions, setReactions] = useState<FloatingReaction[]>([]);
 
+  // Seamlessly restore view if mediaRoomStore already has this room active (e.g. returning after navigating around app)
+  useEffect(() => {
+    if (
+      persistentRoom &&
+      persistentRoomInfo &&
+      persistentRoomInfo.type === 'movie' &&
+      (!currentRoom || persistentRoomInfo.roomId === currentRoom.roomId) &&
+      !isJoined
+    ) {
+      joinedRoomIdRef.current = persistentRoomInfo.roomId;
+      setLivekitData({
+        serverUrl: persistentRoomInfo.serverUrl,
+        token: persistentRoomInfo.token,
+        roomName: persistentRoomInfo.roomName,
+        displayName: persistentRoomInfo.displayName,
+      });
+      setCallType('livekit');
+      setIsJoined(true);
+    }
+  }, [persistentRoom, persistentRoomInfo, currentRoom?.roomId, isJoined]);
+
   const handleJoinRoom = async (roomIdToJoin?: string) => {
     const targetRoomId = roomIdToJoin || currentRoom?.roomId;
     if (!targetRoomId || isJoined || inFlightJoinRef.current || joinedRoomIdRef.current === targetRoomId) {
       return;
     }
 
+    clearExplicitlyLeft(targetRoomId);
     inFlightJoinRef.current = true;
     setIsJoining(true);
     try {
@@ -119,7 +141,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
     }
   };
 
-  // Auto join room if active
+  // Auto join room if active, unless explicitly left by user
   useEffect(() => {
     if (
       currentRoom &&
@@ -127,11 +149,12 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
       !isJoined &&
       !isJoining &&
       !inFlightJoinRef.current &&
-      joinedRoomIdRef.current !== currentRoom.roomId
+      joinedRoomIdRef.current !== currentRoom.roomId &&
+      !explicitlyLeftRoomIds.includes(currentRoom.roomId)
     ) {
       handleJoinRoom(currentRoom.roomId);
     }
-  }, [currentRoom?.roomId, currentRoom?.status, isJoined, isJoining]);
+  }, [currentRoom?.roomId, currentRoom?.status, isJoined, isJoining, explicitlyLeftRoomIds]);
 
   // Sync incoming Socket.IO reactions to floating emojis
   const lastReactionIdRef = useRef<string | null>(null);
@@ -209,16 +232,21 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
   const handleLeaveRoom = () => {
     soundManager.playPing();
+    const leavingId = currentRoom?.roomId || joinedRoomIdRef.current;
     joinedRoomIdRef.current = null;
     inFlightJoinRef.current = false;
     setIsJoined(false);
     setLivekitData(null);
+    if (leavingId) {
+      useMediaRoomStore.getState().leaveRoom(true);
+    }
   };
 
   const handleEndSession = async () => {
     soundEffects.playPop();
-    if (activeRoomId) {
-      await endTogetherRoom(activeRoomId);
+    const endingId = activeRoomId || currentRoom?.roomId || joinedRoomIdRef.current;
+    if (endingId) {
+      await endTogetherRoom(endingId);
     }
     handleLeaveRoom();
     onSessionEnded?.();
@@ -248,7 +276,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-rose-500/20 text-rose-500 border-2 border-[var(--border)] flex items-center justify-center p-3 shrink-0 shadow-[0_2px_0_var(--shadow-color)]">
-            <Film className="w-7 h-7" />
+            <GoogleIcon name="movie" size={28} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -285,7 +313,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
           disabled={isJoining}
           className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
         >
-          <Sparkles className="w-5 h-5 fill-current animate-pulse" />
+          <GoogleIcon name="auto_awesome" size={20} filled className="animate-pulse" />
           <span>{isJoining ? 'Entering Theater…' : isFromPartner ? `Join ${hostName}'s Theater 🍿` : 'Enter Theater 🚪'}</span>
         </button>
       </div>
@@ -300,14 +328,14 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
 
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-500 border-2 border-[var(--border)] flex items-center justify-center p-2.5">
-            <Film className="w-6 h-6" />
+            <GoogleIcon name="movie" size={24} />
           </div>
           <div>
-            <h3 className="font-chunky text-2xl font-bold text-[var(--text)]">
+            <h3 className="font-heading text-2xl font-normal text-[var(--text)]">
               Movie Night & Screen Party
             </h3>
             <p className="font-ui text-xs text-[var(--text-muted)] mt-0.5">
-              Watch movies, shows, and videos together with Daily audio, video, and tab screen sharing.
+              Watch movies, shows, and YouTube videos together with LiveKit video, audio, and tab screen sharing.
             </p>
           </div>
         </div>
@@ -322,18 +350,23 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
               value={movieTitleInput}
               onChange={(e) => setMovieTitleInput(e.target.value)}
               placeholder="e.g. Studio Ghibli Marathon, Spider-Man, Anime Night"
-              className="w-full px-4 py-3 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-romantic text-lg focus:outline-none focus:border-rose-500 transition-colors"
+              className="w-full px-4 py-3 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-ui text-base focus:outline-none focus:border-rose-500 transition-colors"
             />
           </div>
 
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-[var(--text)] space-y-1">
-            <p className="font-chunky text-xs font-bold flex items-center gap-1.5 text-rose-500">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>How Movie Night Works</span>
+          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-[var(--text)] space-y-2">
+            <p className="font-heading text-xs font-normal flex items-center gap-1.5 text-rose-500">
+              <GoogleIcon name="auto_awesome" size={14} filled />
+              <span>How Screen Sharing Works</span>
             </p>
-            <p className="font-ui text-xs text-[var(--text-muted)] leading-relaxed">
-              One partner shares their browser tab with "Share tab audio" checked. The other partner watches prominently with webcam & reactions alongside!
-            </p>
+            <div className="font-ui text-xs text-[var(--text-muted)] space-y-1.5 leading-relaxed">
+              <p>
+                💻 <strong>Laptop/Desktop:</strong> Click the screen share button inside the room, pick your browser tab or window, and ensure <strong>"Also share tab audio"</strong> is checked.
+              </p>
+              <p>
+                📱 <strong>Phone/Tablet:</strong> Mobile browsers can comfortably watch the stream in full sync with camera and reactions alongside!
+              </p>
+            </div>
           </div>
         </div>
 
@@ -341,9 +374,9 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
           type="button"
           onClick={handleStartSession}
           disabled={isStarting}
-          className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-chunky font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
+          className="w-full py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-ui font-bold text-base border-2 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center gap-2"
         >
-          <Film className="w-5 h-5 fill-current" />
+          <GoogleIcon name="movie" size={20} filled />
           <span>{isStarting ? 'Setting up Theater…' : 'Start Movie Night'}</span>
         </button>
       </div>
@@ -374,7 +407,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
       <div className="w-full bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-4 sm:p-5 shadow-[0_4px_0_var(--shadow-color)] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-rose-500 border border-rose-500/30 flex items-center justify-center p-2">
-            <Film className="w-5 h-5" />
+            <GoogleIcon name="movie" size={20} />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -414,7 +447,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             }`}
             title="Toggle Cinema Dimming Mode"
           >
-            {cinemaMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {cinemaMode ? <GoogleIcon name="light_mode" size={16} /> : <GoogleIcon name="dark_mode" size={16} />}
             <span className="hidden sm:inline">{cinemaMode ? 'Normal Mode' : 'Cinema Mode'}</span>
           </button>
 
@@ -424,7 +457,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             className="p-2.5 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-chunky font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs"
             title="End Movie Night for both"
           >
-            <LogOut className="w-3.5 h-3.5" />
+            <GoogleIcon name="logout" size={14} />
             <span className="hidden sm:inline">End Night</span>
           </button>
         </div>
@@ -438,9 +471,9 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             {/* Screenshare instruction banner */}
             <div className="px-4 py-2.5 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-between text-xs font-ui text-[var(--text)]">
               <span className="flex items-center gap-1.5">
-                <MonitorUp className="w-4 h-4 text-indigo-400 shrink-0" />
+                <GoogleIcon name="screen_share" size={16} className="text-indigo-400 shrink-0" />
                 <span>
-                  <strong>Screen Share Movie:</strong> Click screen share in the frame below to stream your tab.
+                  <strong>Screen Share:</strong> Stream any tab with audio via the monitor icon in controls below.
                 </span>
               </span>
             </div>
@@ -472,7 +505,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
                         className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
                         title="End movie session for both partners"
                       >
-                        <LogOut className="w-3.5 h-3.5" />
+                        <GoogleIcon name="logout" size={14} />
                         <span className="hidden sm:inline">End Session</span>
                       </button>
                     }
@@ -495,7 +528,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
                       className="px-3 py-1.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-ui text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
                       title="End movie session for both partners"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <GoogleIcon name="logout" size={14} />
                       <span className="hidden sm:inline">End Session</span>
                     </button>
                   }
@@ -534,7 +567,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             <div className="bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-4 shadow-[0_2px_0_var(--shadow-color)] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-ui text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <GoogleIcon name="auto_awesome" size={14} filled className="text-amber-400" />
                   <span>Send Live Reaction:</span>
                 </span>
                 <span className="text-[11px] font-ui text-[var(--text-muted)]">Floats on partner's screen</span>
@@ -595,7 +628,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
               {/* Screen Sharing Tip Alert */}
               {mode === 'screen' && (
                 <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[var(--text)] flex items-start gap-2.5 text-xs">
-                  <MonitorUp className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <GoogleIcon name="screen_share" size={16} className="text-amber-500 shrink-0 mt-0.5" />
                   <p className="font-ui leading-relaxed">
                     <strong className="text-amber-500">Audio tip:</strong> When browser asks what to share, pick a <strong>Browser Tab</strong> and check <strong className="underline">"Also share tab audio"</strong>.
                   </p>
@@ -642,7 +675,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             <div className="bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-4 shadow-[0_2px_0_var(--shadow-color)] flex flex-col gap-3 min-h-[220px]">
               <div className="flex items-center justify-between pb-1 border-b border-[var(--border)]">
                 <span className="font-ui text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-rose-500" />
+                  <GoogleIcon name="chat" size={14} className="text-rose-500" />
                   <span>Movie Whispers & Chat</span>
                 </span>
                 <span className="text-[10px] font-ui text-[var(--text-muted)]">
@@ -698,7 +731,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
                   disabled={!chatInput.trim()}
                   className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white cursor-pointer font-bold flex items-center justify-center shadow-xs"
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <GoogleIcon name="send" size={14} />
                 </button>
               </form>
             </div>
@@ -713,16 +746,7 @@ export const MovieNightView: React.FC<MovieNightViewProps> = ({
             type="button"
             onClick={() => {
               if (currentRoom) {
-                joinTogetherRoom(currentRoom.roomId).then((res) => {
-                  setLivekitData({
-                    roomName: res.roomName,
-                    token: res.token,
-                    serverUrl: res.serverUrl,
-                    displayName: currentUser.displayName || 'Partner',
-                  });
-                  setCallType(res.token ? 'livekit' : 'webrtc');
-                  setIsJoined(true);
-                });
+                handleJoinRoom(currentRoom.roomId);
               }
             }}
             className="px-6 py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-chunky font-bold text-sm border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] cursor-pointer"

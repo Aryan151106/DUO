@@ -107,7 +107,39 @@ export function getDateKeyForTimestamp(timestampMs: number, timeZone?: string): 
 }
 
 /**
+ * Computes the exact offset in milliseconds between UTC and a target timeZone at a given moment.
+ */
+function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    fractionalSecondDigits: 3,
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  let year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0, millisecond = 0;
+  for (const part of parts) {
+    if (part.type === 'year') year = parseInt(part.value, 10);
+    else if (part.type === 'month') month = parseInt(part.value, 10);
+    else if (part.type === 'day') day = parseInt(part.value, 10);
+    else if (part.type === 'hour') hour = parseInt(part.value, 10);
+    else if (part.type === 'minute') minute = parseInt(part.value, 10);
+    else if (part.type === 'second') second = parseInt(part.value, 10);
+    else if (part.type === 'fractionalSecond') millisecond = parseInt(part.value, 10);
+  }
+  if (hour === 24) hour = 0;
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second, millisecond);
+  return asUtc - date.getTime();
+}
+
+/**
  * Computes start-of-day epoch milliseconds for a given timestamp in a specified timezone.
+ * Accurately accounts for hours, minutes (e.g. UTC+5:30, UTC+9:30), and daylight saving time.
  */
 export function getStartOfDayMs(timestampMs: number, timeZone?: string): number {
   const dateKey = getDateKeyForTimestamp(timestampMs, timeZone);
@@ -115,23 +147,12 @@ export function getStartOfDayMs(timestampMs: number, timeZone?: string): number 
   
   if (timeZone) {
     try {
-      // Find midnight in target timeZone
-      const testDate = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone,
-        hour12: false,
-        year: 'numeric',
-        month: 'numeric',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric',
-        second: 'numeric',
-      });
-      // Adjust offset difference
-      const parts = formatter.formatToParts(testDate);
-      const tzHour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
-      const diffMs = (tzHour % 24) * 3600000;
-      return testDate.getTime() - diffMs;
+      const targetUtcMidnight = Date.UTC(y, m - 1, d, 0, 0, 0, 0);
+      const initialOffset = getTimeZoneOffsetMs(new Date(targetUtcMidnight), timeZone);
+      const candidateMs = targetUtcMidnight - initialOffset;
+      // Refine across possible DST transitions near midnight
+      const refinedOffset = getTimeZoneOffsetMs(new Date(candidateMs), timeZone);
+      return targetUtcMidnight - refinedOffset;
     } catch {
       // Fallback to local
     }
@@ -146,11 +167,14 @@ export function getStartOfDayMs(timestampMs: number, timeZone?: string): number 
  */
 export function getEndOfDayMs(timestampMs: number, timeZone?: string): number {
   const start = getStartOfDayMs(timestampMs, timeZone);
-  return start + (24 * 60 * 60 * 1000) - 1;
+  // Target next day's midnight minus 1 millisecond
+  const nextDayStart = getStartOfDayMs(start + 26 * 3600000, timeZone);
+  return nextDayStart - 1;
 }
 
 /**
- * Generates user-friendly friendly label for a day group (Today, Yesterday, or formatted date).
+ * Generates user-friendly label for a day group (Today, Yesterday, or formatted date).
+ * Avoids browser device timezone shifts by formatting the resolved date components consistently.
  */
 export function getFriendlyDayLabel(dateKey: string, timeZone?: string): string {
   const todayKey = getDateKeyForTimestamp(Date.now(), timeZone);
@@ -160,14 +184,15 @@ export function getFriendlyDayLabel(dateKey: string, timeZone?: string): string 
   if (dateKey === yesterdayKey) return 'Yesterday';
 
   const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
+  // Construct date at UTC noon to avoid any timezone boundary crossings
+  const utcDate = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
   try {
     return new Intl.DateTimeFormat('en-US', {
-      timeZone: timeZone || undefined,
+      timeZone: 'UTC',
       month: 'short',
       day: 'numeric',
-      year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-    }).format(date);
+      year: y !== new Date().getFullYear() ? 'numeric' : undefined,
+    }).format(utcDate);
   } catch {
     return dateKey;
   }

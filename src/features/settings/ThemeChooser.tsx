@@ -29,8 +29,8 @@ const COLOR_ROLES: { key: keyof ThemeColors; label: string; description: string 
   { key: 'bg', label: 'Background', description: 'App page backdrop' },
   { key: 'surface', label: 'Surface', description: 'Cards and dialogs' },
   { key: 'text', label: 'Text', description: 'Headings and reading text' },
-  { key: 'partnerA', label: 'Alex (Partner A)', description: 'First partner color' },
-  { key: 'partnerB', label: 'Sam (Partner B)', description: 'Second partner color' },
+  { key: 'partnerA', label: 'Aryan (Partner A)', description: 'First partner color' },
+  { key: 'partnerB', label: 'Vidhi (Partner B)', description: 'Second partner color' },
   { key: 'accent', label: 'Accent', description: 'Buttons, stars & highlights' },
   { key: 'urgent', label: 'Urgent', description: 'Nudges and alarms' },
 ];
@@ -116,7 +116,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
             <span>Preset Vibes</span>
           </label>
           <span className="text-xs font-ui font-medium text-[var(--text-muted)]">
-            6 Handcrafted Palettes
+            Curated Themes & Palettes
           </span>
         </div>
 
@@ -130,11 +130,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
                 key={preset.id}
                 type="button"
                 onClick={() => setTheme(preset.id)}
-                className={`relative p-3 rounded-2xl text-left transition-all cursor-pointer border-3 ${
-                  isSelected
-                    ? 'border-[var(--text)] ring-2 ring-[var(--text)] ring-offset-2 -translate-y-1 shadow-[0_4px_0_var(--shadow-color)]'
-                    : 'border-[var(--border)] hover:-translate-y-0.5 shadow-[0_2px_0_var(--shadow-color)]'
-                }`}
+                className={`pal ${isSelected ? 'on' : ''} relative p-3 rounded-2xl text-left transition-all cursor-pointer`}
                 style={{ backgroundColor: colors.bg }}
               >
                 {/* Mini Preview Box */}
@@ -159,27 +155,27 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
                     )}
                   </div>
 
-                  {/* Swatch dots */}
+                  {/* Swatch dots matching PAL (--a, --b, --c, --d) */}
                   <div className="flex items-center gap-1.5">
                     <span
                       className="w-3.5 h-3.5 rounded-full border border-black/20"
                       style={{ backgroundColor: colors.partnerA }}
-                      title="Partner A"
-                    />
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/20"
-                      style={{ backgroundColor: colors.partnerB }}
-                      title="Partner B"
+                      title="Pillar 1 (--a / Partner A)"
                     />
                     <span
                       className="w-3.5 h-3.5 rounded-full border border-black/20"
                       style={{ backgroundColor: colors.accent }}
-                      title="Accent"
+                      title="Pillar 2 (--b / Accent)"
                     />
                     <span
                       className="w-3.5 h-3.5 rounded-full border border-black/20"
-                      style={{ backgroundColor: colors.urgent }}
-                      title="Urgent"
+                      style={{ backgroundColor: colors.partnerB }}
+                      title="Pillar 3 (--c / Partner B)"
+                    />
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-black/20"
+                      style={{ backgroundColor: colors.success }}
+                      title="Pillar 4 (--d / Success)"
                     />
                   </div>
                 </div>
@@ -304,7 +300,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
 
       {/* 5. "Make It Yours" Customizer Section */}
       <div>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
           <button
             type="button"
             onClick={() => setShowCustomizer(!showCustomizer)}
@@ -320,7 +316,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
           <button
             type="button"
             onClick={resetTheme}
-            className="flex items-center gap-1 text-xs font-ui font-semibold text-[var(--text-muted)] hover:text-[var(--urgent)] transition-colors cursor-pointer"
+            className="self-start sm:self-auto flex items-center gap-1 text-xs font-ui font-semibold text-[var(--text-muted)] hover:text-[var(--urgent)] transition-colors cursor-pointer"
             title="Reset theme and colors to defaults"
           >
             <RotateCcw className="w-3.5 h-3.5" />

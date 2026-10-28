@@ -216,6 +216,43 @@ async function getAuthenticatedUser(req) {
   };
 }
 
+/**
+ * Authoritatively check if a given user UID is an authorized member of coupleId in Firestore.
+ */
+async function verifyUserCoupleMembership(uid, coupleId) {
+  if (!uid || !coupleId) return false;
+  if (!db) return true; // Offline / local mock mode
+
+  if (!isProduction && (coupleId.startsWith('demo') || coupleId === 'couple-duo')) {
+    return true;
+  }
+
+  try {
+    const coupleDoc = await db.collection('couples').doc(coupleId).get();
+    if (coupleDoc.exists) {
+      const data = coupleDoc.data() || {};
+      const members = Array.isArray(data.members) ? data.members : [];
+      if (members.includes(uid) || data.partnerA === uid || data.partnerB === uid) {
+        return true;
+      }
+    }
+
+    const spaceDoc = await db.collection('spaces').doc(coupleId).get();
+    if (spaceDoc.exists) {
+      const data = spaceDoc.data() || {};
+      const members = Array.isArray(data.members) ? data.members : [];
+      if (members.includes(uid) || data.partnerA === uid || data.partnerB === uid) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    console.error(`[MembershipCheck] Failed to verify couple membership for ${uid} in ${coupleId}:`, err.message);
+    return false;
+  }
+}
+
 // REST Endpoint: Create Authoritative Together Room (Study or Movie)
 app.post('/api/livekit/create-room', async (req, res) => {
   try {
@@ -226,6 +263,11 @@ app.post('/api/livekit/create-room', async (req, res) => {
     }
 
     const coupleId = reqCoupleId || user.coupleId || 'couple-duo';
+    const isMember = await verifyUserCoupleMembership(user.uid, coupleId);
+    if (!isMember) {
+      return res.status(403).json({ error: 'Forbidden: You are not authorized to create rooms for this couple space.' });
+    }
+
     const roomId = requestedRoomId || `${type}-${coupleId}`.toLowerCase();
     const roomName = requestedRoomName || `duo-${coupleId}-${type}`.toLowerCase();
 
@@ -282,7 +324,7 @@ app.post('/api/livekit/create-room', async (req, res) => {
     });
   } catch (err) {
     console.error('[LiveKit Server] create-room error:', err.message);
-    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500;
+    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Forbidden') ? 403 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500);
     return res.status(status).json({ error: err.message });
   }
 });
@@ -296,32 +338,48 @@ app.post('/api/livekit/join-room', async (req, res) => {
       return res.status(400).json({ error: 'Missing roomId.' });
     }
 
-    const coupleId = reqCoupleId || user.coupleId || 'couple-duo';
+    let coupleId = reqCoupleId || user.coupleId;
     let type = reqType || (roomId.includes('movie') ? 'movie' : 'study');
-    let roomName = reqRoomName || `duo-${coupleId}-${type}`.toLowerCase();
+    let roomName = reqRoomName;
     let isHost = false;
 
     if (db) {
+      let roomSnap;
       try {
-        const roomSnap = await db.collection('togetherRooms').doc(roomId).get();
-        if (roomSnap.exists) {
-          const roomData = roomSnap.data();
-          if (roomData.status === 'ended') {
-            return res.status(410).json({ error: 'This together room has already ended.' });
-          }
-          isHost = roomData.hostUid === user.uid;
-          roomName = roomData.roomName || roomName;
-          type = roomData.type || type;
-
-          await roomSnap.ref.update({
-            status: 'active',
-            memberUids: admin.firestore.FieldValue.arrayUnion(user.uid),
-            lastActiveAt: admin.firestore.FieldValue.serverTimestamp(),
-          }).catch(() => {});
-        }
+        roomSnap = await db.collection('togetherRooms').doc(roomId).get();
       } catch (dbErr) {
-        console.warn('[LiveKit Server] Firestore join read skipped:', dbErr.message);
+        console.error('[LiveKit Server] Firestore join read failed:', dbErr.message);
+        return res.status(500).json({ error: 'Database check failed while verifying room.' });
       }
+
+      if (!roomSnap || !roomSnap.exists) {
+        return res.status(404).json({ error: 'Together room does not exist.' });
+      }
+
+      const roomData = roomSnap.data();
+      if (roomData.status === 'ended') {
+        return res.status(410).json({ error: 'This together room has already ended.' });
+      }
+
+      coupleId = roomData.coupleId || coupleId;
+      const isMember = await verifyUserCoupleMembership(user.uid, coupleId);
+      const isHostOrMember = roomData.hostUid === user.uid || (Array.isArray(roomData.memberUids) && roomData.memberUids.includes(user.uid));
+
+      if (!isMember && !isHostOrMember) {
+        return res.status(403).json({ error: 'Forbidden: You do not have permission to join this together room.' });
+      }
+
+      isHost = roomData.hostUid === user.uid;
+      roomName = roomData.roomName || roomName || `duo-${coupleId}-${type}`.toLowerCase();
+      type = roomData.type || type;
+
+      await roomSnap.ref.update({
+        status: 'active',
+        memberUids: admin.firestore.FieldValue.arrayUnion(user.uid),
+        lastActiveAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch((uErr) => console.warn('[LiveKit Server] Update memberUids notice:', uErr.message));
+    } else {
+      roomName = roomName || `duo-${coupleId || 'demo'}-${type}`.toLowerCase();
     }
 
     const { token, serverUrl } = await generateLiveKitToken({
@@ -342,7 +400,7 @@ app.post('/api/livekit/join-room', async (req, res) => {
     });
   } catch (err) {
     console.error('[LiveKit Server] join-room error:', err.message);
-    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500;
+    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Forbidden') ? 403 : (err.message.includes('Missing') || err.message.includes('Invalid') || err.message.includes('failed')) ? 401 : 500);
     return res.status(status).json({ error: err.message });
   }
 });
@@ -359,12 +417,19 @@ app.post('/api/livekit/end-room', async (req, res) => {
     if (db) {
       try {
         const roomSnap = await db.collection('togetherRooms').doc(roomId).get();
-        if (roomSnap.exists && roomSnap.data().hostUid === user.uid) {
-          await roomSnap.ref.update({
-            status: 'ended',
-            endedAt: admin.firestore.FieldValue.serverTimestamp(),
-            endedBy: user.uid,
-          });
+        if (roomSnap.exists) {
+          const roomData = roomSnap.data();
+          const isMember =
+            roomData.hostUid === user.uid ||
+            (Array.isArray(roomData.memberUids) && roomData.memberUids.includes(user.uid)) ||
+            !roomData.hostUid;
+          if (isMember) {
+            await roomSnap.ref.update({
+              status: 'ended',
+              endedAt: admin.firestore.FieldValue.serverTimestamp(),
+              endedBy: user.uid,
+            });
+          }
         }
       } catch (dbErr) {
         console.warn('[LiveKit Server] Firestore end-room update skipped:', dbErr.message);
@@ -384,31 +449,47 @@ app.post('/api/livekit/token', async (req, res) => {
     const user = await getAuthenticatedUser(req);
     const { roomId, coupleId: reqCoupleId, roomName: reqRoomName } = req.body || {};
     const targetRoomId = roomId;
-    const targetCoupleId = reqCoupleId || user.coupleId || 'couple-duo';
 
     if (!targetRoomId) {
       return res.status(400).json({ error: 'Missing roomId' });
     }
 
+    let targetCoupleId = reqCoupleId || user.coupleId;
     let type = targetRoomId.includes('movie') ? 'movie' : 'study';
-    let roomName = reqRoomName || `duo-${targetCoupleId}-${type}`.toLowerCase();
+    let roomName = reqRoomName;
     let hostFlag = false; // Strictly default to false; NEVER trust client isHost
 
     if (db) {
+      let roomSnap;
       try {
-        const roomSnap = await db.collection('togetherRooms').doc(targetRoomId).get();
-        if (roomSnap.exists) {
-          const roomData = roomSnap.data();
-          if (roomData.status === 'ended') {
-            return res.status(410).json({ error: 'Room has ended.' });
-          }
-          // Strictly derive host privileges from trusted room data
-          hostFlag = roomData.hostUid === user.uid;
-          roomName = roomData.roomName || roomName;
-        }
+        roomSnap = await db.collection('togetherRooms').doc(targetRoomId).get();
       } catch (dbErr) {
-        console.warn('[LiveKit Server] Firestore token read skipped:', dbErr.message);
+        console.error('[LiveKit Server] Firestore token read failed:', dbErr.message);
+        return res.status(500).json({ error: 'Database check failed while verifying room.' });
       }
+
+      if (!roomSnap || !roomSnap.exists) {
+        return res.status(404).json({ error: 'Together room does not exist.' });
+      }
+
+      const roomData = roomSnap.data();
+      if (roomData.status === 'ended') {
+        return res.status(410).json({ error: 'Room has ended.' });
+      }
+
+      targetCoupleId = roomData.coupleId || targetCoupleId;
+      const isMember = await verifyUserCoupleMembership(user.uid, targetCoupleId);
+      const isHostOrMember = roomData.hostUid === user.uid || (Array.isArray(roomData.memberUids) && roomData.memberUids.includes(user.uid));
+
+      if (!isMember && !isHostOrMember) {
+        return res.status(403).json({ error: 'Forbidden: You do not have permission to access tokens for this together room.' });
+      }
+
+      // Strictly derive host privileges from trusted room data
+      hostFlag = roomData.hostUid === user.uid;
+      roomName = roomData.roomName || roomName || `duo-${targetCoupleId}-${type}`.toLowerCase();
+    } else {
+      roomName = roomName || `duo-${targetCoupleId || 'demo'}-${type}`.toLowerCase();
     }
 
     const { token, serverUrl } = await generateLiveKitToken({
@@ -428,7 +509,7 @@ app.post('/api/livekit/token', async (req, res) => {
     });
   } catch (err) {
     console.error('[LiveKit Server] Error issuing token:', err.message);
-    const status = err.message.includes('credentials') ? 503 : 500;
+    const status = err.message.includes('credentials') ? 503 : (err.message.includes('Forbidden') ? 403 : 500);
     return res.status(status).json({ error: err.message });
   }
 });
@@ -523,13 +604,8 @@ async function verifyUserInRoom(roomId, uid) {
 
   if (!db) {
     return {
-      authorized: true,
-      room: {
-        roomId,
-        memberUids: [uid],
-        hostUid: uid,
-        status: 'active',
-      },
+      authorized: false,
+      error: 'Database not initialized',
     };
   }
 
@@ -537,13 +613,8 @@ async function verifyUserInRoom(roomId, uid) {
     const roomSnap = await db.collection('togetherRooms').doc(roomId).get();
     if (!roomSnap.exists) {
       return {
-        authorized: true,
-        room: {
-          roomId,
-          memberUids: [uid],
-          hostUid: uid,
-          status: 'active',
-        },
+        authorized: false,
+        error: 'Together room does not exist',
       };
     }
 
@@ -552,17 +623,22 @@ async function verifyUserInRoom(roomId, uid) {
       return { authorized: false, error: 'Together room has ended' };
     }
 
+    const isMemberOfCouple = await verifyUserCoupleMembership(uid, room.coupleId);
+    const isHostOrMember = room.hostUid === uid || (Array.isArray(room.memberUids) && room.memberUids.includes(uid));
+
+    if (!isMemberOfCouple && !isHostOrMember) {
+      return {
+        authorized: false,
+        error: 'Unauthorized: User does not belong to this room or couple space',
+      };
+    }
+
     return { authorized: true, room, ref: roomSnap.ref };
   } catch (err) {
-    console.warn('[verifyUserInRoom] Firestore check error:', err.message);
+    console.error('[verifyUserInRoom] Firestore check error:', err.message);
     return {
-      authorized: true,
-      room: {
-        roomId,
-        memberUids: [uid],
-        hostUid: uid,
-        status: 'active',
-      },
+      authorized: false,
+      error: 'Failed to authoritatively verify room membership',
     };
   }
 }

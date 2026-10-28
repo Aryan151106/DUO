@@ -38,6 +38,7 @@ import { PeriodTrackerCard } from './PeriodTrackerCard';
 import { useReminderStore, checkAndFireDueReminders } from '../../lib/reminders';
 import { useMinuteNow } from '../../lib/useNow';
 import { soundEffects } from '../../lib/sound';
+import { WavyText } from '../../components/WavyHeading';
 import {
   ChevronLeft,
   ChevronRight,
@@ -407,6 +408,18 @@ export const CalendarView: React.FC = () => {
         </div>
       )}
 
+      {/* Page Heading Wordmark */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[28px] sm:text-[38px] font-display font-normal text-[var(--text)] tracking-wide">
+            <WavyText text="CALENDAR" isDisplay={true} />
+          </h1>
+          <p className="font-ui font-medium text-xs sm:text-sm text-[var(--text-muted)] mt-0.5">
+            moments, dates, and shared plans 🌸
+          </p>
+        </div>
+      </div>
+
       {/* Main Calendar Bar: Month/Year, Navigation, View Selector, + New Event */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-[var(--surface)] p-4 sm:p-5 rounded-3xl border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)]">
         {/* Month Title & Prev/Next/Today */}
@@ -434,9 +447,9 @@ export const CalendarView: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsMonthPickerOpen(!isMonthPickerOpen)}
-              className="font-display text-xl sm:text-2xl text-[var(--text)] hover:opacity-80 transition-opacity flex items-center gap-1.5 cursor-pointer"
+              className="text-2xl sm:text-3xl text-[var(--text)] hover:opacity-80 transition-opacity flex items-center gap-1.5 cursor-pointer"
             >
-              <span>{format(currentDate, 'MMMM yyyy')}</span>
+              <WavyText text={format(currentDate, 'MMMM yyyy')} />
             </button>
 
             {/* Quick Month/Year Dropdown */}

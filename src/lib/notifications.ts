@@ -20,6 +20,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  limit,
   serverTimestamp,
   type Unsubscribe,
 } from 'firebase/firestore';
@@ -75,7 +76,8 @@ interface NotificationStoreState {
   permission: NotificationPermission | 'unsupported';
   diagnostics: NotificationDiagnostics;
 
-  initNotifications: (userId: string, coupleId: string) => Promise<void>;
+  initNotifications: (userId: string, coupleId: string) => Unsubscribe | void;
+  cleanupNotifications: () => void;
   requestPermissionAndToken: (userId: string) => Promise<boolean>;
   markAsRead: (coupleId: string, notifId: string) => Promise<void>;
   markAllAsRead: (coupleId: string) => Promise<void>;
@@ -146,16 +148,24 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
       notes: [],
     },
 
-    initNotifications: async (userId: string, coupleId: string) => {
+    cleanupNotifications: () => {
+      if (activeUnsubscribe) {
+        activeUnsubscribe();
+        activeUnsubscribe = null;
+      }
+      set({ notifications: [], unreadCount: 0 });
+    },
+
+    initNotifications: (userId: string, coupleId: string) => {
       if (!coupleId || coupleId.startsWith('demo')) return;
 
       if (activeUnsubscribe) {
         activeUnsubscribe();
       }
 
-      // 1. Subscribe to In-App Notifications collection
+      // 1. Subscribe to In-App Notifications collection with bound limit
       const notifsCol = collection(db, 'couples', coupleId, 'notifications');
-      const q = query(notifsCol, orderBy('createdAt', 'desc'));
+      const q = query(notifsCol, orderBy('createdAt', 'desc'), limit(50));
 
       let isInitialLoad = true;
 
@@ -182,24 +192,10 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
 
         set({ notifications: items, unreadCount: unread });
 
-        // On first app load, auto-clear Android tray notifications and mark stale items read
+        // On first app load, sync Android/PWA tray badges without destroying unread state
         if (isInitialLoad) {
           clearAndroidAndPwaBadges();
-
-          const unreadOld = items.filter((n) => !n.read && n.senderId !== userId);
-          if (unreadOld.length > 0 && coupleId) {
-            try {
-              const batch = writeBatch(db);
-              unreadOld.slice(0, 500).forEach((item) => {
-                if (item.id) {
-                  batch.update(doc(db, 'couples', coupleId, 'notifications', item.id), {
-                    read: true,
-                  });
-                }
-              });
-              batch.commit().catch(() => {});
-            } catch {}
-          }
+          isInitialLoad = false;
         }
 
         // Update PWA App Badge if supported
@@ -310,6 +306,13 @@ export const useNotificationStore = create<NotificationStoreState>((set, get) =>
 
       // 2. Initialize OneSignal user session immediately
       initOneSignal(userId).catch(() => {});
+
+      return () => {
+        if (activeUnsubscribe) {
+          activeUnsubscribe();
+          activeUnsubscribe = null;
+        }
+      };
     },
 
     requestPermissionAndToken: async (userId: string) => {

@@ -13,9 +13,21 @@ service firebase.storage {
       );
     }
 
+    // Helper function for profile avatar access: owner or paired couple partner
+    function canAccessProfile(userId) {
+      return request.auth != null && (
+        request.auth.uid == userId ||
+        (
+          firestore.exists(/databases/(default)/documents/profiles/$(userId)) &&
+          firestore.get(/databases/(default)/documents/profiles/$(userId)).data.coupleId != null &&
+          isMember(firestore.get(/databases/(default)/documents/profiles/$(userId)).data.coupleId)
+        )
+      );
+    }
+
     // User profile avatars
     match /users/{userId}/{fileName} {
-      allow read: if request.auth != null;
+      allow read: if canAccessProfile(userId);
       allow write: if request.auth != null && request.auth.uid == userId &&
         request.resource.size <= 10 * 1024 * 1024 &&
         request.resource.contentType.matches('image/.*');

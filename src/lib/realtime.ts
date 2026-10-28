@@ -62,7 +62,9 @@ export function startRealtimeRouter(coupleId: string, queryClient: QueryClient) 
             id: nudgePayload.id,
             taskId: nudgePayload.taskId,
             taskTitle: nudgePayload.taskTitle,
-            senderName: data.senderId === 'user-alex-1' ? 'Alex' : 'Sam',
+            senderName:
+              nudgePayload?.senderName ||
+              (data.senderId === 'user-aryan-1' || data.senderId === 'user-alex-1' ? 'Aryan' : 'Vidhi'),
             level: nudgePayload.level || 1,
             level4Count: nudgePayload.level4Count || 0,
             createdAt: new Date().toISOString(),

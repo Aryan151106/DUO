@@ -499,13 +499,30 @@ class DuoDataStore {
       const key = `duo_diary_${userId}_v1`;
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw);
-      if (userId === 'user-alex-1') {
+      if (userId === 'user-vidhi-2' || userId === 'user-sam-2') {
+        const initial: DiaryEntry[] = [
+          {
+            id: 'diary-demo-vidhi-1',
+            userId,
+            title: 'My quiet corner & feeling grateful ✨',
+            content: 'So thankful for this cozy space of ours. Even when we are studying or working on our own things, having Aryan right beside me makes everything feel softer. Taking a moment to appreciate the little joys.',
+            mood: '✨ Inspired',
+            date: new Date().toISOString().split('T')[0],
+            tags: ['Reflections', 'Grateful', 'Cozy'],
+            createdAt: new Date(Date.now() - 3600000).toISOString(),
+            updatedAt: new Date(Date.now() - 3600000).toISOString(),
+          },
+        ];
+        this.saveDiaryEntries(userId, initial);
+        return initial;
+      }
+      if (userId === 'user-alex-1' || userId === 'user-aryan-1') {
         const initial: DiaryEntry[] = [
           {
             id: 'diary-demo-1',
-            userId: 'user-alex-1',
+            userId,
             title: 'Quiet reflections & grateful for us 🌸',
-            content: 'Today was such a peaceful afternoon. Working alongside Sam in the study room made everything feel softer and calmer. Taking time to remember how far we have come together.',
+            content: 'Today was such a peaceful afternoon. Working alongside Vidhi in the study room made everything feel softer and calmer. Taking time to remember how far we have come together.',
             mood: '🌸 Peaceful',
             date: new Date().toISOString().split('T')[0],
             tags: ['Reflections', 'Gratitude'],

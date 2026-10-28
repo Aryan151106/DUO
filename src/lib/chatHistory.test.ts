@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeMessageTimestamp,
   getDateKeyForTimestamp,
+  getStartOfDayMs,
+  getEndOfDayMs,
   getFriendlyDayLabel,
   groupMessagesByDay,
   mergeAndDeduplicateMessages,
@@ -68,6 +70,30 @@ describe('chatHistory engine', () => {
 
       expect(utcKey).toBe('2026-10-15');
       expect(istKey).toBe('2026-10-16');
+    });
+
+    it('computes exact start and end of day in fractional timezone (Asia/Kolkata +5:30)', () => {
+      // 2026-10-16 noon IST
+      const timeMs = new Date('2026-10-16T12:00:00.000+05:30').getTime();
+      const startMs = getStartOfDayMs(timeMs, 'Asia/Kolkata');
+      const endMs = getEndOfDayMs(timeMs, 'Asia/Kolkata');
+
+      // Start of day in IST (00:00:00.000 IST) is 18:30:00.000 UTC of previous day
+      expect(new Date(startMs).toISOString()).toBe('2026-10-15T18:30:00.000Z');
+      expect(getDateKeyForTimestamp(startMs, 'Asia/Kolkata')).toBe('2026-10-16');
+      expect(getDateKeyForTimestamp(startMs - 1, 'Asia/Kolkata')).toBe('2026-10-15');
+
+      // End of day in IST (23:59:59.999 IST) is 18:29:59.999 UTC of Oct 16
+      expect(new Date(endMs).toISOString()).toBe('2026-10-16T18:29:59.999Z');
+      expect(getDateKeyForTimestamp(endMs, 'Asia/Kolkata')).toBe('2026-10-16');
+      expect(getDateKeyForTimestamp(endMs + 1, 'Asia/Kolkata')).toBe('2026-10-17');
+    });
+
+    it('formats friendly date labels consistently regardless of timezone', () => {
+      // Check historical date labeling
+      const label = getFriendlyDayLabel('2025-05-14', 'Asia/Kolkata');
+      expect(label).toContain('May 14');
+      expect(label).toContain('2025');
     });
 
     it('returns Today for today dateKey', () => {
