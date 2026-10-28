@@ -121,6 +121,19 @@ service cloud.firestore {
       match /events/{eventId} {
         allow read, write: if isCoupleMember(coupleId);
       }
+
+      // Online Game Sessions: Only couple members can read. Writes are strictly validated; client cannot forge winner results.
+      match /gameSessions/{sessionId} {
+        allow read: if isCoupleMember(coupleId);
+        allow write: if isCoupleMember(coupleId) &&
+          (!('result' in request.resource.data) || request.resource.data.result == null);
+      }
+
+      // Online Game Stats: Authoritative streak records written by backend server only; clients can read
+      match /gameStats/{statId} {
+        allow read: if isCoupleMember(coupleId);
+        allow write: if false;
+      }
       
       // All other nested collections (tasks, messages, scores, wishlist, nudges)
       match /{subcollection}/{document=**} {
@@ -176,6 +189,17 @@ service cloud.firestore {
 
       match /sharedMedia/{mediaId} {
         allow read, write: if isCoupleMember(spaceId);
+      }
+
+      match /gameSessions/{sessionId} {
+        allow read: if isCoupleMember(spaceId);
+        allow write: if isCoupleMember(spaceId) &&
+          (!('result' in request.resource.data) || request.resource.data.result == null);
+      }
+
+      match /gameStats/{statId} {
+        allow read: if isCoupleMember(spaceId);
+        allow write: if false;
       }
 
       match /{subcollection}/{document=**} {

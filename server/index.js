@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import admin from 'firebase-admin';
 import { AccessToken, TrackSource } from 'livekit-server-sdk';
+import { setupGameSocketHandlers } from './gameServer.js';
 
 dotenv.config();
 
@@ -895,6 +896,8 @@ async function verifyUserInRoom(roomId, uid) {
 io.on('connection', (socket) => {
   const uid = socket.data.uid;
   console.log(`[Socket] User connected: ${uid} (socket ${socket.id})`);
+
+  setupGameSocketHandlers(io, socket, db, admin, isProduction, verifyUserCoupleMembership);
 
   let joinedRoomId = null;
 

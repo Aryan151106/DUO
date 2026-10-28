@@ -48,11 +48,11 @@ interface AuthStore {
   soundsEnabled: boolean;
   isDemoMode: boolean;
   activeTab: 'today' | 'calendar' | 'chat' | 'doodle' | 'together' | 'settings';
-  togetherSubTab: 'focus' | 'movie' | 'wishlist' | 'recap' | 'diary' | 'media';
+  togetherSubTab: 'focus' | 'movie' | 'wishlist' | 'recap' | 'diary' | 'media' | 'games';
   timeFormat: '12h' | '24h' | 'auto';
   firstDayOfWeek: 'sunday' | 'monday';
   setTab: (tab: 'today' | 'calendar' | 'chat' | 'doodle' | 'together' | 'settings') => void;
-  setTogetherSubTab: (subTab: 'focus' | 'movie' | 'wishlist' | 'recap' | 'diary' | 'media') => void;
+  setTogetherSubTab: (subTab: 'focus' | 'movie' | 'wishlist' | 'recap' | 'diary' | 'media' | 'games') => void;
   setTimeFormat: (format: '12h' | '24h' | 'auto') => void;
   setFirstDayOfWeek: (day: 'sunday' | 'monday') => void;
   setSoundsEnabled: (enabled: boolean) => void;

@@ -30,6 +30,9 @@ const StudySpaceView = lazy(() =>
 const MovieNightView = lazy(() =>
   import('./MovieNightView').then((m) => ({ default: m.MovieNightView }))
 );
+const GamesArea = lazy(() =>
+  import('./games/GamesArea').then((m) => ({ default: m.GamesArea }))
+);
 
 export const TogetherSpace: React.FC = () => {
   const { currentUser, partnerUser, couple, isDemoMode, togetherSubTab, setTogetherSubTab } = useAuthStore();
@@ -297,6 +300,18 @@ export const TogetherSpace: React.FC = () => {
         >
           <GoogleIcon name="menu_book" size={14} />
           <span>Personal Diary 📖</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            soundEffects.playPop();
+            setTogetherSubTab('games');
+          }}
+          className={`chip ${togetherSubTab === 'games' ? 'on' : ''}`}
+        >
+          <GoogleIcon name="sports_esports" size={14} />
+          <span>Games 🎮</span>
         </button>
       </div>
 
@@ -627,6 +642,19 @@ export const TogetherSpace: React.FC = () => {
 
       {/* 6. PERSONAL DIARY (100% Private per User) */}
       {togetherSubTab === 'diary' && <PersonalDiary />}
+
+      {/* 7. SILLY GAME ARCADE */}
+      {togetherSubTab === 'games' && (
+        <Suspense
+          fallback={
+            <div className="p-12 text-center text-[var(--text-muted)] font-ui text-sm font-bold">
+              Loading Silly Arcade 🎮...
+            </div>
+          }
+        >
+          <GamesArea />
+        </Suspense>
+      )}
     </div>
   );
 };

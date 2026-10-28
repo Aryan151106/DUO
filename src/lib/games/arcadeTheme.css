@@ -1,0 +1,276 @@
+/* Scoped Arcade Styling - Preserves Silly Arcade Aesthetics without global leakage */
+
+.silly-arcade {
+  --arcade-bg: #fff3d6;
+  --arcade-ink: #2b2140;
+  --arcade-card: #ffffff;
+  --arcade-a: #ff5d8f;
+  --arcade-b: #2bb5d4;
+  --arcade-c: #ffc233;
+  --arcade-s1: #f5e3bf;
+  --arcade-s2: #b98655;
+  color: var(--arcade-ink);
+  font-family: 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', -apple-system, sans-serif;
+  user-select: none;
+}
+
+:root[data-theme='dark'] .silly-arcade,
+.dark .silly-arcade {
+  --arcade-bg: #1c1632;
+  --arcade-ink: #fdf3ff;
+  --arcade-card: #2e2450;
+  --arcade-s1: #d9c7a0;
+  --arcade-s2: #7a5a3e;
+}
+
+.arcade-card {
+  background: var(--arcade-card);
+  border: 3px solid var(--arcade-ink);
+  border-radius: 24px;
+  box-shadow: 5px 5px 0 var(--arcade-ink);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+}
+
+.arcade-btn {
+  font-family: inherit;
+  font-weight: 800;
+  border: 3px solid var(--arcade-ink);
+  background: var(--arcade-c);
+  color: #2b2140;
+  border-radius: 16px;
+  padding: 10px 16px;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--arcade-ink);
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s, box-shadow 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  touch-action: manipulation;
+}
+
+.arcade-btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 4px 4px 0 var(--arcade-ink);
+}
+
+.arcade-btn:active:not(:disabled) {
+  transform: translateY(2px) scale(0.96);
+  box-shadow: 1px 1px 0 var(--arcade-ink);
+}
+
+.arcade-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.arcade-btn-pink {
+  background: var(--arcade-a);
+  color: #ffffff;
+}
+
+.arcade-btn-blue {
+  background: var(--arcade-b);
+  color: #ffffff;
+}
+
+.arcade-btn-pill {
+  border-radius: 9999px;
+  padding: 8px 18px;
+}
+
+/* Floating background decoration */
+.arcade-bg-float {
+  position: absolute;
+  font-size: 1.8rem;
+  opacity: 0.28;
+  pointer-events: none;
+  animation: arcade-float linear infinite;
+  z-index: 0;
+}
+
+@keyframes arcade-float {
+  from {
+    transform: translateY(105%) rotate(0deg);
+  }
+  to {
+    transform: translateY(-20%) rotate(360deg);
+  }
+}
+
+/* Mascot bobbing */
+.arcade-mascot {
+  display: inline-block;
+  cursor: pointer;
+  animation: arcade-bob 2.2s ease-in-out infinite;
+  touch-action: manipulation;
+}
+
+@keyframes arcade-bob {
+  0%, 100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-10px) scale(1.08, 0.94);
+  }
+}
+
+.arcade-wobble {
+  animation: arcade-wob 0.5s ease;
+}
+
+@keyframes arcade-wob {
+  25% { transform: rotate(-8deg) scale(1.1); }
+  75% { transform: rotate(8deg) scale(1.1); }
+}
+
+/* Tic-tac-toe animations */
+.arcade-ttt-stamp {
+  animation: arcade-stamp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes arcade-stamp {
+  from {
+    transform: scale(2.5) rotate(45deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.arcade-dance {
+  animation: arcade-win-dance 0.5s infinite alternate ease-in-out;
+}
+
+@keyframes arcade-win-dance {
+  to {
+    transform: rotate(6deg) scale(1.08);
+  }
+}
+
+/* Connect Four Drop Animation */
+.arcade-disc-drop {
+  animation: arcade-drop 0.45s cubic-bezier(0.5, 0, 0.8, 1);
+}
+
+@keyframes arcade-drop {
+  from {
+    transform: translateY(-380%);
+  }
+  60% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-20%);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Chess Eyes Animation */
+.arcade-chess-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: arcade-eye-look 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes arcade-eye-look {
+  0% { transform: translate(-2px, 1px); }
+  50% { transform: translate(2px, -1px); }
+  100% { transform: translate(1px, 2px); }
+}
+
+.arcade-prop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: arcade-prop-spin 0.28s linear infinite alternate;
+}
+
+@keyframes arcade-prop-spin {
+  to { transform: scaleX(0.18); }
+}
+
+/* Shake effect for invalid moves */
+.arcade-shake {
+  animation: arcade-shake-anim 0.35s ease-in-out;
+}
+
+@keyframes arcade-shake-anim {
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+/* Speech bubble on chess capture */
+.arcade-speech-bubble {
+  position: absolute;
+  background: #ffffff;
+  color: #2b2140;
+  border: 3px solid #2b2140;
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  max-width: 200px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 25;
+  box-shadow: 3px 3px 0 #2b2140;
+  animation: arcade-bubble-pop 2s forwards ease;
+}
+
+.arcade-speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  margin-left: -6px;
+  border: 6px solid transparent;
+  border-top-color: #2b2140;
+}
+
+@keyframes arcade-bubble-pop {
+  0% { transform: scale(0); opacity: 0; }
+  15% { transform: scale(1.1); opacity: 1; }
+  25%, 80% { transform: scale(1); opacity: 1; }
+  100% { transform: translateY(-12px) scale(0.9); opacity: 0; }
+}
+
+/* Ghost capture flyaway */
+.arcade-ghost {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  animation: arcade-yeet 1.4s ease-in forwards;
+}
+
+@keyframes arcade-yeet {
+  0% { transform: scale(1); }
+  20% { transform: scale(1.3, 0.7); }
+  100% {
+    transform: translateY(-80px) rotate(360deg) scale(0.1);
+    opacity: 0;
+  }
+}
+
+/* Accessibility: Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .arcade-bg-float,
+  .arcade-mascot,
+  .arcade-wobble,
+  .arcade-ttt-stamp,
+  .arcade-dance,
+  .arcade-disc-drop,
+  .arcade-chess-eye,
+  .arcade-prop,
+  .arcade-shake,
+  .arcade-speech-bubble,
+  .arcade-ghost {
+    animation: none !important;
+    transition: none !important;
+  }
+}
