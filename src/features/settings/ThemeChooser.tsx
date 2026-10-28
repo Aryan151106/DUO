@@ -120,7 +120,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 w-full min-w-0">
           {(Object.values(PRESET_THEMES) as Array<typeof PRESET_THEMES[keyof typeof PRESET_THEMES]>).map((preset) => {
             const isSelected = theme === preset.id;
             const colors = resolvedMode === 'dark' ? preset.dark : preset.light;
@@ -130,58 +130,62 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
                 key={preset.id}
                 type="button"
                 onClick={() => setTheme(preset.id)}
-                className={`pal ${isSelected ? 'on' : ''} relative p-3 rounded-2xl text-left transition-all cursor-pointer`}
+                className={`group relative p-2.5 sm:p-3 rounded-2xl text-left transition-all cursor-pointer w-full min-w-0 border-2 sm:border-3 ${
+                  isSelected
+                    ? 'border-[var(--partner-a)] shadow-[0_4px_0_var(--partner-a)] scale-[1.02]'
+                    : 'border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] hover:border-[var(--text-muted)]'
+                }`}
                 style={{ backgroundColor: colors.bg }}
               >
                 {/* Mini Preview Box */}
                 <div
-                  className="rounded-xl p-2.5 mb-2 border-2"
+                  className="rounded-xl p-2 sm:p-2.5 mb-2 border-2 min-w-0"
                   style={{ backgroundColor: colors.surface, borderColor: colors.border }}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span
-                      className="text-[11px] font-logo font-bold truncate"
+                  <div className="flex items-center justify-between gap-1.5 mb-1.5 min-w-0">
+                    <div
+                      className="text-xs sm:text-sm font-chunky font-bold truncate flex-1 min-w-0 leading-tight"
                       style={{ color: colors.text }}
                     >
                       {preset.name}
-                    </span>
+                    </div>
                     {isSelected && (
-                      <span
+                      <div
                         className="w-4 h-4 rounded-full flex items-center justify-center text-white shrink-0"
                         style={{ backgroundColor: colors.partnerA }}
                       >
-                        <Check className="w-3 h-3 stroke-[3]" />
-                      </span>
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
                     )}
                   </div>
 
                   {/* Swatch dots matching PAL (--a, --b, --c, --d) */}
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/20"
+                  <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap shrink-0">
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
                       style={{ backgroundColor: colors.partnerA }}
-                      title="Pillar 1 (--a / Partner A)"
+                      title="Partner A"
                     />
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/20"
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
                       style={{ backgroundColor: colors.accent }}
-                      title="Pillar 2 (--b / Accent)"
+                      title="Accent"
                     />
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/20"
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
                       style={{ backgroundColor: colors.partnerB }}
-                      title="Pillar 3 (--c / Partner B)"
+                      title="Partner B"
                     />
-                    <span
-                      className="w-3.5 h-3.5 rounded-full border border-black/20"
+                    <div
+                      className="w-3.5 h-3.5 rounded-full border border-black/20 shrink-0"
                       style={{ backgroundColor: colors.success }}
-                      title="Pillar 4 (--d / Success)"
+                      title="Success"
                     />
                   </div>
                 </div>
 
                 <p
-                  className="text-[11px] font-body line-clamp-1 leading-tight opacity-80"
+                  className="text-[10px] sm:text-[11px] font-ui line-clamp-1 leading-tight opacity-80 min-w-0 truncate"
                   style={{ color: colors.text }}
                 >
                   {preset.description}
@@ -327,7 +331,7 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
         {showCustomizer && (
           <div className="p-4 rounded-3xl bg-[var(--surface)] border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4">
             {/* Role Switcher Tabs */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 no-scrollbar flex-nowrap w-full min-w-0">
               {COLOR_ROLES.map((r) => {
                 const isActive = activeRole === r.key;
                 const currentColorVal = currentColors[r.key];
@@ -336,10 +340,10 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
                     key={r.key}
                     type="button"
                     onClick={() => setActiveRole(r.key)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-ui font-bold whitespace-nowrap transition-all cursor-pointer border-2 ${
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-ui font-bold whitespace-nowrap transition-all cursor-pointer border-2 shrink-0 ${
                       isActive
                         ? 'bg-[var(--surface-2)] text-[var(--text)] border-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]'
-                        : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                        : 'border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] bg-[var(--surface)]'
                     }`}
                   >
                     <span
@@ -353,20 +357,20 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
             </div>
 
             {/* Active Role Editor */}
-            <div className="p-3 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)]">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <div className="text-xs font-chunky font-bold text-[var(--text)]">
+            <div className="p-3 sm:p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3.5 min-w-0">
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs sm:text-sm font-chunky font-bold text-[var(--text)] truncate">
                     Edit {COLOR_ROLES.find((r) => r.key === activeRole)?.label}
                   </div>
-                  <div className="text-[11px] font-body text-[var(--text-muted)]">
+                  <div className="text-[10px] sm:text-[11px] font-body text-[var(--text-muted)] truncate">
                     {COLOR_ROLES.find((r) => r.key === activeRole)?.description}
                   </div>
                 </div>
 
                 {/* Direct Hex & Native Color Input */}
-                <div className="flex items-center gap-2">
-                  <div className="relative">
+                <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                  <div className="relative shrink-0">
                     <input
                       type="color"
                       value={currentColors[activeRole]}
@@ -392,11 +396,16 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
               </div>
 
               {/* 36 Flat Color Swatches Palette */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] font-chunky uppercase tracking-wider text-[var(--text-muted)]">
-                  36 Flat Spectrum Swatches:
-                </span>
-                <div className="grid grid-cols-9 sm:grid-cols-12 gap-1.5">
+              <div className="space-y-2 min-w-0">
+                <div className="flex items-center justify-between min-w-0">
+                  <span className="text-[10px] font-chunky uppercase tracking-wider text-[var(--text-muted)]">
+                    36 Flat Spectrum Swatches:
+                  </span>
+                  <span className="text-[10px] font-ui text-[var(--text-muted)]">
+                    Tap to apply
+                  </span>
+                </div>
+                <div className="grid grid-cols-6 sm:grid-cols-9 md:grid-cols-12 gap-1.5 sm:gap-2 w-full">
                   {FLAT_SWATCHES_36.map((swatch) => {
                     const isCurrent = currentColors[activeRole].toUpperCase() === swatch.toUpperCase();
                     return (
@@ -404,9 +413,9 @@ export const ThemeChooser: React.FC<ThemeChooserProps> = ({ compact = false }) =
                         key={swatch}
                         type="button"
                         onClick={() => setCustomColor(activeRole, swatch)}
-                        className={`w-7 h-7 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-center ${
+                        className={`w-full aspect-square max-w-[42px] mx-auto rounded-xl border-2 transition-all cursor-pointer flex items-center justify-center ${
                           isCurrent
-                            ? 'border-black dark:border-white scale-110 shadow-[0_2px_0_rgba(0,0,0,0.4)]'
+                            ? 'border-black dark:border-white scale-110 shadow-[0_2px_0_rgba(0,0,0,0.4)] ring-2 ring-white/50'
                             : 'border-black/15 hover:scale-105'
                         }`}
                         style={{ backgroundColor: swatch }}

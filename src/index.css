@@ -1941,30 +1941,6 @@ body {
 
 
 
-/* Palette Swatches */
-.pal {
-  border: 0;
-  border-radius: 16px;
-  padding: 10px;
-  background: var(--bg);
-  text-align: left;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform .15s;
-}
-.pal.on {
-  box-shadow: 5px 5px 0 color-mix(in srgb, var(--ink) 22%, transparent);
-  transform: rotate(-2deg);
-  outline: 3px solid var(--c);
-}
-.pal span {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 0;
-  margin-right: 3px;
-}
 
 /* Big Display Numbers */
 .big {

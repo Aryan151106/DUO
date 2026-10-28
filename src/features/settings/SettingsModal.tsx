@@ -811,33 +811,33 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         {/* PWA Download App & Android Badges */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b-2 border-[var(--border)]">
-            <div className="flex items-center gap-2">
+        <div className="w-full max-w-full overflow-hidden p-3.5 sm:p-5 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] shadow-xs space-y-3.5 sm:space-y-4 min-w-0">
+          <div className="flex items-center justify-between gap-2 pb-2 border-b-2 border-[var(--border)] min-w-0">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
               <Download className="w-4 h-4 text-[var(--accent)] shrink-0" />
-              <h3 className="font-chunky text-sm font-bold text-[var(--text)]">
+              <h3 className="font-chunky text-xs sm:text-sm font-bold text-[var(--text)] truncate">
                 App Download & Home Screen Tools
               </h3>
             </div>
-            <span className="text-[11px] font-ui font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-600 border-emerald-500/30 shrink-0 whitespace-nowrap self-start sm:self-center">
+            <span className="text-[10px] sm:text-[11px] font-ui font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-600 border-emerald-500/30 shrink-0 whitespace-nowrap">
               PWA Ready ✓
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 w-full min-w-0">
             <button
               type="button"
               onClick={() => setShowInstallModal(true)}
-              className="p-3 rounded-xl bg-[var(--surface)] hover:bg-[var(--accent)]/20 border-2 border-[var(--border)] text-left flex items-center gap-3 cursor-pointer transition-colors shadow-xs"
+              className="w-full min-w-0 max-w-full p-2.5 sm:p-3 rounded-xl bg-[var(--surface)] hover:bg-[var(--accent)]/20 border-2 border-[var(--border)] text-left flex items-center gap-2.5 sm:gap-3 cursor-pointer transition-colors shadow-xs overflow-hidden"
             >
-              <div className="w-9 h-9 rounded-lg bg-[var(--partner-a)]/30 border border-[var(--border)] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-[var(--partner-a)]/30 border border-[var(--border)] flex items-center justify-center shrink-0">
                 <Download className="w-4 h-4 text-[var(--text)]" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <span className="font-ui font-bold text-xs text-[var(--text)] block truncate">
                   Download & Install Duo App
                 </span>
-                <span className="font-ui text-[11px] text-[var(--text-muted)] block truncate">
+                <span className="font-ui text-[10px] sm:text-[11px] text-[var(--text-muted)] block truncate">
                   Install on phone home screen or laptop
                 </span>
               </div>
@@ -851,16 +851,16 @@ export const SettingsModal: React.FC = () => {
                 setNotifFeedback('Android home badges & tray cleared! ✓');
                 setTimeout(() => setNotifFeedback(null), 3000);
               }}
-              className="p-3 rounded-xl bg-[var(--surface)] hover:bg-[var(--accent)]/20 border-2 border-[var(--border)] text-left flex items-center gap-3 cursor-pointer transition-colors shadow-xs"
+              className="w-full min-w-0 max-w-full p-2.5 sm:p-3 rounded-xl bg-[var(--surface)] hover:bg-[var(--accent)]/20 border-2 border-[var(--border)] text-left flex items-center gap-2.5 sm:gap-3 cursor-pointer transition-colors shadow-xs overflow-hidden"
             >
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-[var(--border)] flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-emerald-500/20 border border-[var(--border)] flex items-center justify-center shrink-0">
                 <Check className="w-4 h-4 text-emerald-600" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 overflow-hidden">
                 <span className="font-ui font-bold text-xs text-[var(--text)] block truncate">
                   Clear Android Badge to 0
                 </span>
-                <span className="font-ui text-[11px] text-[var(--text-muted)] block truncate">
+                <span className="font-ui text-[10px] sm:text-[11px] text-[var(--text-muted)] block truncate">
                   Wipe home icon badge & active tray cards
                 </span>
               </div>
@@ -868,7 +868,7 @@ export const SettingsModal: React.FC = () => {
           </div>
 
           {notifFeedback && (
-            <div className="p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--text)] font-ui leading-relaxed">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-xs text-[var(--text)] font-ui leading-relaxed min-w-0 break-words">
               {notifFeedback}
             </div>
           )}
