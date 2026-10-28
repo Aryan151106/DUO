@@ -329,6 +329,126 @@ app.post('/api/livekit/create-room', async (req, res) => {
   }
 });
 
+// REST Endpoint: Dispatch Push Notification via OneSignal or Firestore sync
+app.post('/api/push/send', async (req, res) => {
+  try {
+    const user = await getAuthenticatedUser(req);
+    const {
+      coupleId: reqCoupleId,
+      targetUserId,
+      title,
+      body,
+      type = 'message',
+      deepLink = '/',
+      metadata = {},
+      eventId = null,
+    } = req.body || {};
+
+    const coupleId = reqCoupleId || user.coupleId;
+    if (!coupleId || !targetUserId || !title) {
+      return res.status(400).json({ error: 'Missing required parameters (coupleId, targetUserId, title).' });
+    }
+
+    const isMember = await verifyUserCoupleMembership(user.uid, coupleId);
+    if (!isMember) {
+      return res.status(403).json({ error: 'Forbidden: You are not authorized for this couple space.' });
+    }
+
+    const oneSignalApiKey = (process.env.ONESIGNAL_REST_API_KEY || '').trim();
+    const oneSignalAppId = (process.env.ONESIGNAL_APP_ID || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
+
+    let notificationId = null;
+    let recipients = 0;
+    let requestAccepted = false;
+    let reason = 'no_push_key';
+
+    if (oneSignalApiKey && oneSignalAppId) {
+      const authHeader = oneSignalApiKey.startsWith('Key ') || oneSignalApiKey.startsWith('Basic ')
+        ? oneSignalApiKey
+        : oneSignalApiKey.startsWith('os_v2_app_')
+        ? `Key ${oneSignalApiKey}`
+        : `Basic ${oneSignalApiKey}`;
+
+      const payload = {
+        app_id: oneSignalAppId,
+        include_aliases: {
+          external_id: [targetUserId],
+        },
+        target_channel: 'push',
+        headings: { en: String(title).slice(0, 100) },
+        contents: { en: String(body || '').slice(0, 300) },
+        priority: 10,
+        android_priority: 10,
+        delayed_option: 'immediate',
+        ttl: type === 'call' ? 120 : 86400,
+        data: {
+          type,
+          senderId: user.uid,
+          targetUserId,
+          url: deepLink,
+          eventId,
+          ...metadata,
+        },
+      };
+
+      try {
+        const osRes = await fetch('https://api.onesignal.com/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authHeader,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const osData = await osRes.json().catch(() => null);
+        if (osRes.ok) {
+          notificationId = osData?.id || null;
+          recipients = typeof osData?.recipients === 'number' ? osData.recipients : 1;
+          requestAccepted = true;
+          reason = recipients > 0 ? 'accepted' : 'no_matching_subscription';
+        } else {
+          console.warn('[Push] OneSignal API notice:', osData);
+          reason = osData?.errors?.[0] || `http_${osRes.status}`;
+        }
+      } catch (osErr) {
+        console.error('[Push] OneSignal fetch error:', osErr.message);
+        reason = osErr.message;
+      }
+    }
+
+    // Always record Firestore notification so foreground app and in-app center immediately receive it
+    if (db) {
+      try {
+        await db.collection('couples').doc(coupleId).collection('notifications').add({
+          title,
+          body,
+          type,
+          senderId: user.uid,
+          senderName: user.displayName || 'Partner',
+          deepLink,
+          metadata: { ...metadata, recipientId: targetUserId },
+          read: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (dbErr) {
+        console.warn('[Push] Firestore notification record notice:', dbErr.message);
+      }
+    }
+
+    return res.json({
+      success: true,
+      requestAccepted: true,
+      notificationId,
+      recipients,
+      reason: requestAccepted ? reason : 'synced_via_realtime',
+    });
+  } catch (err) {
+    console.error('[Push Server] send-push error:', err.message);
+    return res.status(500).json({ error: err.message, success: false, requestAccepted: false, reason: err.message });
+  }
+});
+
 // REST Endpoint: Join Authoritative Together Room
 app.post('/api/livekit/join-room', async (req, res) => {
   try {

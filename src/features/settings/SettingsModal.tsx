@@ -39,6 +39,9 @@ import {
   RotateCcw,
   Info,
   Sparkles,
+  User,
+  Smartphone,
+  LayoutGrid,
 } from 'lucide-react';
 
 const COMMON_TIMEZONES = [
@@ -79,6 +82,22 @@ const COMMON_TIMEZONES = [
   'UTC',
 ];
 
+export type SettingsTab = 'appearance' | 'notifications' | 'profile' | 'preferences' | 'all';
+
+interface SettingsTabConfig {
+  id: SettingsTab;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const SETTINGS_TABS: SettingsTabConfig[] = [
+  { id: 'appearance', label: 'Theme & Style', icon: Sparkles },
+  { id: 'notifications', label: 'Alerts & Sounds', icon: Bell },
+  { id: 'profile', label: 'Profile & Lock', icon: User },
+  { id: 'preferences', label: 'Preferences', icon: Sliders },
+  { id: 'all', label: 'All Settings', icon: LayoutGrid },
+];
+
 export const SettingsModal: React.FC = () => {
   const {
     currentUser,
@@ -92,6 +111,16 @@ export const SettingsModal: React.FC = () => {
     setTab,
     setTogetherSubTab,
   } = useAuthStore();
+
+  const [activeSettingsTab, setActiveSettingsTab] = useState<SettingsTab>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('duo_settings_active_tab') as SettingsTab | null;
+      if (saved && ['appearance', 'notifications', 'profile', 'preferences', 'all'].includes(saved)) {
+        return saved;
+      }
+    }
+    return 'appearance';
+  });
 
   const [copiedCode, setCopiedCode] = useState(false);
   const [tzSearch, setTzSearch] = useState('');
@@ -125,10 +154,112 @@ export const SettingsModal: React.FC = () => {
     setPrivateNotes(localStorage.getItem(key) || '');
   }, [currentUser?.id]);
 
-  // OneSignal Free Push state
+  // OneSignal & Push Test state
+  const [deviceTesting, setDeviceTesting] = useState(false);
+  const [deviceTestResult, setDeviceTestResult] = useState<string | null>(null);
   const [oneSignalTesting, setOneSignalTesting] = useState(false);
   const [oneSignalTestResult, setOneSignalTestResult] = useState<string | null>(null);
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
+
+  const handleTestLocalDevice = async () => {
+    setDeviceTesting(true);
+    setDeviceTestResult(null);
+    try {
+      if (typeof window === 'undefined' || !('Notification' in window)) {
+        setDeviceTestResult('Push notifications are not supported by this browser.');
+        return;
+      }
+
+      let perm = Notification.permission;
+      if (perm === 'default') {
+        perm = await Notification.requestPermission();
+      }
+
+      if (perm !== 'granted') {
+        setDeviceTestResult('⚠️ Notification permission blocked. Please allow Notifications in your browser/device settings.');
+        return;
+      }
+
+      soundEngine.play('notification', { force: true });
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate([200, 100, 200]);
+        } catch {}
+      }
+
+      let swSuccess = false;
+      if ('serviceWorker' in navigator) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          if (reg && reg.showNotification) {
+            await reg.showNotification('🔔 AV Duo Device Alert', {
+              body: 'Push alerts and sounds are working properly on this device! ✨',
+              icon: '/icons/icon-192.png',
+              badge: '/icons/icon-192.png',
+              tag: 'duo-device-test',
+              vibrate: [200, 100, 200],
+              data: { url: '/' },
+            } as any);
+            swSuccess = true;
+          }
+        } catch (swErr) {
+          console.warn('[PushTest] SW notification warning:', swErr);
+        }
+      }
+
+      if (!swSuccess) {
+        new Notification('🔔 AV Duo Device Alert', {
+          body: 'Push alerts and sounds are working properly on this device! ✨',
+          icon: '/icons/icon-192.png',
+        });
+      }
+
+      setDeviceTestResult('✓ Notification delivered to your phone! Check notification bar.');
+    } catch (err: any) {
+      setDeviceTestResult(`Device test error: ${err?.message || 'Could not display alert'}`);
+    } finally {
+      setDeviceTesting(false);
+    }
+  };
+
+  const handleTestPartnerAlert = async () => {
+    setOneSignalTesting(true);
+    setOneSignalTestResult(null);
+    try {
+      const targetId = partnerUser?.id;
+      if (!targetId) {
+        setOneSignalTestResult('Partner not connected yet');
+        return;
+      }
+
+      const partnerName = partnerUser.displayName || 'Partner';
+      const senderName = currentUser?.displayName || 'Aryan';
+
+      const res = await sendOneSignalPush({
+        coupleId: couple?.id,
+        targetUserId: targetId,
+        title: 'AV Duo Test Alert 💌',
+        body: `${senderName} sent you a test background alert!`,
+        type: 'message',
+      });
+
+      if (res.requestAccepted || res.success) {
+        if (res.reason === 'server_accepted' || res.notificationId) {
+          setOneSignalTestResult(`✓ Push alert sent to ${partnerName}'s phone via OneSignal!`);
+        } else if (res.reason === 'realtime_synced') {
+          setOneSignalTestResult(`✓ Real-time alert dispatched to ${partnerName}!`);
+        } else {
+          setOneSignalTestResult(`✓ Alert dispatched to ${partnerName} successfully!`);
+        }
+      } else {
+        setOneSignalTestResult(`Push status: ${res.reason || 'Partner may need to open the app once to link'}`);
+      }
+    } catch (err: any) {
+      setOneSignalTestResult(`Could not dispatch: ${err?.message || 'Connection error'}`);
+    } finally {
+      setOneSignalTesting(false);
+    }
+  };
 
   // Stop any active preview on unmount
   useEffect(() => {
@@ -241,243 +372,295 @@ export const SettingsModal: React.FC = () => {
     );
   };
 
+  const showAppearance = activeSettingsTab === 'appearance' || activeSettingsTab === 'all';
+  const showNotifications = activeSettingsTab === 'notifications' || activeSettingsTab === 'all';
+  const showProfile = activeSettingsTab === 'profile' || activeSettingsTab === 'all';
+  const showPreferences = activeSettingsTab === 'preferences' || activeSettingsTab === 'all';
+
+  let containerLayoutClass = "grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start";
+  if (activeSettingsTab === 'notifications') {
+    containerLayoutClass = "flex flex-col gap-4 sm:gap-6 max-w-4xl mx-auto w-full";
+  } else if (activeSettingsTab === 'appearance') {
+    containerLayoutClass = "flex flex-col gap-4 sm:gap-6 max-w-3xl mx-auto w-full";
+  }
+
   return (
     <div className="w-full max-w-[1500px] mx-auto px-2.5 sm:px-4 md:px-6 pb-28 pt-2 min-w-0">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 items-start">
-        {/* 1. THEME & APPEARANCE */}
-      <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
-        <div className="flex items-start gap-3 mb-4 sm:mb-5 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Appearance</h2>
-            <p className="font-clean text-xs text-[var(--text-muted)]">
-              Choose a palette and adjust custom colors for your command center.
-            </p>
-          </div>
-        </div>
-        <ThemeChooser />
-        <label className="mt-4 sm:mt-5 flex items-center justify-between gap-3 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3.5 sm:px-4 sm:py-3 font-ui text-sm text-[var(--text)]">
-          <span className="min-w-0">
-            <span className="block font-bold">Show my active status</span>
-            <span className="block text-xs text-[var(--text-muted)] truncate">Let your partner see when you are online.</span>
-          </span>
-          <input
-            type="checkbox"
-            checked={showActiveStatus}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              setShowActiveStatus(enabled);
-              localStorage.setItem('duo_show_active_status', String(enabled));
-            }}
-            aria-label="Show my active status"
-            className="shrink-0"
-          />
-        </label>
-      </section>
-
-      {/* 2. PRIVATE NOTES / DIARY */}
-      <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
-        <div className="flex items-start gap-3 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
-            <CalendarCheck className="w-5 h-5 text-[var(--accent)]" />
-          </div>
-          <div>
-            <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Private journal</h2>
-            <p className="font-clean text-xs text-[var(--text-muted)]">
-              Only you can see these notes. They stay hidden from the other user.
-            </p>
-          </div>
-        </div>
-        <textarea
-          value={privateNotes}
-          onChange={(event) => handlePrivateNotesChange(event.target.value)}
-          rows={5}
-          placeholder="Write a quick private reflection, idea, or personal note..."
-          className="w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3 font-body text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] resize-none"
-        />
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
-          <span className="font-clean text-[11px] text-[var(--text-muted)]">
-            Saved securely for you on this device.
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              soundEngine.play('msg-pop', { force: true });
-              setTab('together');
-              setTogetherSubTab('diary');
-            }}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky text-xs font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 min-h-[40px]"
-          >
-            <span>Open Full Personal Diary 📖</span>
-          </button>
-        </div>
-      </section>
-
-      {/* 3. TIME FORMAT & FIRST DAY OF WEEK */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
-        <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
-            <Clock className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Time & Calendar Format</h2>
-            <p className="font-clean text-xs text-[var(--text-muted)]">
-              Personalize how hours and days are presented across all widgets
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block mb-1.5">
-              Clock Format
-            </span>
-            <div className="grid grid-cols-3 gap-2 bg-[var(--surface-2)] p-1 rounded-2xl border-2 border-[var(--border)]">
-              {[
-                { id: 'auto', label: 'Auto ⚙️' },
-                { id: '12h', label: '12-Hour' },
-                { id: '24h', label: '24-Hour' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    soundEngine.play('msg-pop', { force: true });
-                    setTimeFormat(opt.id as any);
-                  }}
-                  className={`py-2 text-xs font-ui font-semibold rounded-xl transition-all cursor-pointer min-h-[44px] flex items-center justify-center ${
-                    timeFormat === opt.id
-                      ? 'bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] shadow-xs font-bold'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block mb-1.5">
-              First Day of the Week
-            </span>
-            <div className="grid grid-cols-2 gap-2 bg-[var(--surface-2)] p-1 rounded-2xl border-2 border-[var(--border)]">
-              {[
-                { id: 'sunday', label: 'Sunday' },
-                { id: 'monday', label: 'Monday' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    soundEngine.play('msg-pop', { force: true });
-                    setFirstDayOfWeek(opt.id as any);
-                  }}
-                  className={`py-2 text-xs font-ui font-semibold rounded-xl transition-all cursor-pointer min-h-[44px] flex items-center justify-center ${
-                    firstDayOfWeek === opt.id
-                      ? 'bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] shadow-xs font-bold'
-                      : 'text-[var(--text-muted)] hover:text-[var(--text)]'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. PROFILE & TIMEZONE SETTINGS */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
-        <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
-            <Globe className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Profile & Timezone</h2>
-            <p className="font-clean text-xs text-[var(--text-muted)]">
-              Accurate dual timezones for your local clocks and shared calendar
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block">
-                Current Timezone
-              </span>
-              <span className="font-numeric font-bold text-sm text-[var(--text)]">
-                {currentUser.timezone || 'UTC'}
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                soundEngine.play('msg-ding', { force: true });
-                const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-                setCurrentUser({ timezone: detected });
-                if (currentUser?.id) {
-                  updateProfile(currentUser.id, { timezone: detected }).catch(() => {});
-                }
-              }}
-              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] text-xs font-chunky font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer min-h-[44px] flex items-center justify-center"
-            >
-              Detect Device Timezone 📍
-            </button>
-          </div>
-
-          <div className="relative">
-            <div className="flex items-center gap-2 p-2 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)]">
-              <Search className="w-4 h-4 text-[var(--text-muted)] shrink-0 ml-1" />
-              <input
-                type="text"
-                value={tzSearch}
-                onFocus={() => setShowTzDropdown(true)}
-                onChange={(e) => {
-                  setTzSearch(e.target.value);
-                  setShowTzDropdown(true);
+      {/* CATEGORY SELECTOR TABS (MOBILE OPTIMIZED) */}
+      <div className="sticky top-0 z-20 -mx-2.5 sm:-mx-4 md:-mx-6 px-2.5 sm:px-4 md:px-6 py-2.5 mb-4 sm:mb-6 bg-[var(--bg)]/95 backdrop-blur-md border-b-2 border-[var(--border)] transition-all">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1" role="tablist" aria-label="Settings Categories">
+          {SETTINGS_TABS.map((t) => {
+            const Icon = t.icon;
+            const isActive = activeSettingsTab === t.id;
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                id={`settings-tab-${t.id}`}
+                aria-selected={isActive}
+                onClick={() => {
+                  setActiveSettingsTab(t.id);
+                  localStorage.setItem('duo_settings_active_tab', t.id);
+                  soundEngine.play('msg-pop', { force: true });
                 }}
-                placeholder="Search timezone (e.g. New York, London, Tokyo, Kolkata)..."
-                className="w-full bg-transparent text-xs font-clean text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
-              />
-            </div>
-
-            {showTzDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-2 z-40 max-h-48 overflow-y-auto bg-[var(--surface)] border-2 border-[var(--border)] rounded-2xl shadow-[0_4px_0_var(--shadow-color)] p-1 divide-y divide-[var(--border)]">
-                {COMMON_TIMEZONES.filter((tz) =>
-                  tz.toLowerCase().includes(tzSearch.toLowerCase())
-                ).map((tz) => (
-                  <button
-                    key={tz}
-                    type="button"
-                    onClick={() => {
-                      soundEngine.play('msg-pop', { force: true });
-                      setCurrentUser({ timezone: tz });
-                      setShowTzDropdown(false);
-                      setTzSearch('');
-                      if (currentUser?.id) {
-                        updateProfile(currentUser.id, { timezone: tz }).catch(() => {});
-                      }
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs font-clean flex items-center justify-between hover:bg-[var(--surface-2)] cursor-pointer min-h-[36px] ${
-                      currentUser.timezone === tz ? 'bg-[var(--accent)]/30 font-bold' : ''
-                    }`}
-                  >
-                    <span>{tz}</span>
-                    {currentUser.timezone === tz && <Check className="w-3.5 h-3.5 text-[var(--accent)]" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+                className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl font-chunky text-xs font-bold transition-all whitespace-nowrap cursor-pointer select-none border-2 shrink-0 ${
+                  isActive
+                    ? 'bg-[var(--accent)] text-white border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] scale-[1.02]'
+                    : 'bg-[var(--surface)] text-[var(--text-muted)] hover:text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface-2)] shadow-xs'
+                }`}
+              >
+                <Icon className="w-4 h-4 shrink-0" />
+                <span>{t.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 4. NOTIFICATIONS AND SOUNDS (PART E) */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-5 sm:space-y-6 min-w-0">
+      <div className={containerLayoutClass}>
+        {/* 1. THEME & APPEARANCE */}
+        {showAppearance && (
+          <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
+            <div className="flex items-start gap-3 mb-4 sm:mb-5 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Appearance</h2>
+                <p className="font-clean text-xs text-[var(--text-muted)]">
+                  Choose a palette and adjust custom colors for your command center.
+                </p>
+              </div>
+            </div>
+            <ThemeChooser />
+            <label className="mt-4 sm:mt-5 flex items-center justify-between gap-3 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3.5 sm:px-4 sm:py-3 font-ui text-sm text-[var(--text)]">
+              <span className="min-w-0">
+                <span className="block font-bold">Show my active status</span>
+                <span className="block text-xs text-[var(--text-muted)] truncate">Let your partner see when you are online.</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={showActiveStatus}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setShowActiveStatus(enabled);
+                  localStorage.setItem('duo_show_active_status', String(enabled));
+                }}
+                aria-label="Show my active status"
+                className="shrink-0"
+              />
+            </label>
+          </section>
+        )}
+
+        {/* 2. PRIVATE NOTES / DIARY */}
+        {showPreferences && (
+          <section className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
+            <div className="flex items-start gap-3 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
+              <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
+                <CalendarCheck className="w-5 h-5 text-[var(--accent)]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Private journal</h2>
+                <p className="font-clean text-xs text-[var(--text-muted)]">
+                  Only you can see these notes. They stay hidden from the other user.
+                </p>
+              </div>
+            </div>
+            <textarea
+              value={privateNotes}
+              onChange={(event) => handlePrivateNotesChange(event.target.value)}
+              rows={5}
+              placeholder="Write a quick private reflection, idea, or personal note..."
+              className="w-full rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-3.5 py-3 font-body text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent)] resize-none"
+            />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-1">
+              <span className="font-clean text-[11px] text-[var(--text-muted)]">
+                Saved securely for you on this device.
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.play('msg-pop', { force: true });
+                  setTab('together');
+                  setTogetherSubTab('diary');
+                }}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky text-xs font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer flex items-center justify-center gap-1.5 min-h-[40px]"
+              >
+                <span>Open Full Personal Diary 📖</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* 3. TIME FORMAT & FIRST DAY OF WEEK */}
+        {showPreferences && (
+          <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
+            <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
+              <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)]">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Time & Calendar Format</h2>
+                <p className="font-clean text-xs text-[var(--text-muted)]">
+                  Personalize how hours and days are presented across all widgets
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block mb-1.5">
+                  Clock Format
+                </span>
+                <div className="grid grid-cols-3 gap-2 bg-[var(--surface-2)] p-1 rounded-2xl border-2 border-[var(--border)]">
+                  {[
+                    { id: 'auto', label: 'Auto ⚙️' },
+                    { id: '12h', label: '12-Hour' },
+                    { id: '24h', label: '24-Hour' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.play('msg-pop', { force: true });
+                        setTimeFormat(opt.id as any);
+                      }}
+                      className={`py-2 text-xs font-ui font-semibold rounded-xl transition-all cursor-pointer min-h-[44px] flex items-center justify-center ${
+                        timeFormat === opt.id
+                          ? 'bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] shadow-xs font-bold'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block mb-1.5">
+                  First Day of the Week
+                </span>
+                <div className="grid grid-cols-2 gap-2 bg-[var(--surface-2)] p-1 rounded-2xl border-2 border-[var(--border)]">
+                  {[
+                    { id: 'sunday', label: 'Sunday' },
+                    { id: 'monday', label: 'Monday' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.play('msg-pop', { force: true });
+                        setFirstDayOfWeek(opt.id as any);
+                      }}
+                      className={`py-2 text-xs font-ui font-semibold rounded-xl transition-all cursor-pointer min-h-[44px] flex items-center justify-center ${
+                        firstDayOfWeek === opt.id
+                          ? 'bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] shadow-xs font-bold'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. PROFILE & TIMEZONE SETTINGS */}
+        {showProfile && (
+          <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-4 min-w-0">
+            <div className="flex items-center gap-2.5 mb-1 pb-3 border-b-2 border-[var(--border)]">
+              <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
+                <Globe className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-chunky font-bold text-[var(--text)]">Profile & Timezone</h2>
+                <p className="font-clean text-xs text-[var(--text-muted)]">
+                  Accurate dual timezones for your local clocks and shared calendar
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-clean font-semibold text-[var(--text-muted)] block">
+                    Current Timezone
+                  </span>
+                  <span className="font-numeric font-bold text-sm text-[var(--text)]">
+                    {currentUser.timezone || 'UTC'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.play('msg-ding', { force: true });
+                    const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+                    setCurrentUser({ timezone: detected });
+                    if (currentUser?.id) {
+                      updateProfile(currentUser.id, { timezone: detected }).catch(() => {});
+                    }
+                  }}
+                  className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] text-xs font-chunky font-bold shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 cursor-pointer min-h-[44px] flex items-center justify-center"
+                >
+                  Detect Device Timezone 📍
+                </button>
+              </div>
+
+              <div className="relative">
+                <div className="flex items-center gap-2 p-2 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)]">
+                  <Search className="w-4 h-4 text-[var(--text-muted)] shrink-0 ml-1" />
+                  <input
+                    type="text"
+                    value={tzSearch}
+                    onFocus={() => setShowTzDropdown(true)}
+                    onChange={(e) => {
+                      setTzSearch(e.target.value);
+                      setShowTzDropdown(true);
+                    }}
+                    placeholder="Search timezone (e.g. New York, London, Tokyo, Kolkata)..."
+                    className="w-full bg-transparent text-xs font-clean text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
+                  />
+                </div>
+
+                {showTzDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-2 z-40 max-h-48 overflow-y-auto bg-[var(--surface)] border-2 border-[var(--border)] rounded-2xl shadow-[0_4px_0_var(--shadow-color)] p-1 divide-y divide-[var(--border)]">
+                    {COMMON_TIMEZONES.filter((tz) =>
+                      tz.toLowerCase().includes(tzSearch.toLowerCase())
+                    ).map((tz) => (
+                      <button
+                        key={tz}
+                        type="button"
+                        onClick={() => {
+                          soundEngine.play('msg-pop', { force: true });
+                          setCurrentUser({ timezone: tz });
+                          setShowTzDropdown(false);
+                          setTzSearch('');
+                          if (currentUser?.id) {
+                            updateProfile(currentUser.id, { timezone: tz }).catch(() => {});
+                          }
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs font-clean flex items-center justify-between hover:bg-[var(--surface-2)] cursor-pointer min-h-[36px] ${
+                          currentUser.timezone === tz ? 'bg-[var(--accent)]/30 font-bold' : ''
+                        }`}
+                      >
+                        <span>{tz}</span>
+                        {currentUser.timezone === tz && <Check className="w-3.5 h-3.5 text-[var(--accent)]" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4. NOTIFICATIONS AND SOUNDS (PART E) */}
+        {showNotifications && (
+          <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] space-y-5 sm:space-y-6 min-w-0">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b-2 border-[var(--border)]">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
@@ -659,47 +842,46 @@ export const SettingsModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 pt-1 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2">
+            <button
+              type="button"
+              disabled={deviceTesting}
+              onClick={handleTestLocalDevice}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] hover:text-white border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
+            >
+              <Smartphone className="w-4 h-4 shrink-0" />
+              <span>{deviceTesting ? 'Testing Device...' : 'TEST THIS DEVICE 🔔'}</span>
+            </button>
+
             <button
               type="button"
               disabled={oneSignalTesting}
-              onClick={async () => {
-                setOneSignalTesting(true);
-                setOneSignalTestResult(null);
-                try {
-                  const targetId = partnerUser?.id;
-                  if (!targetId) {
-                    setOneSignalTestResult('Vidhi / Aryan not connected yet');
-                    return;
-                  }
-                  const res = await sendOneSignalPush({
-                    coupleId: couple?.id,
-                    targetUserId: targetId,
-                    title: 'AV Signal Test',
-                    body: `${currentUser.displayName || 'Aryan'} sent a test background push!`,
-                    type: 'message',
-                  });
-                  setOneSignalTestResult(
-                    res.requestAccepted
-                      ? (res.recipients && res.recipients > 0
-                          ? 'Request accepted by OneSignal (targeted active device) ✓'
-                          : 'Request accepted by OneSignal (no active subscriber device linked)')
-                      : `Push request not accepted: ${res.reason || 'check configuration'}`
-                  );
-                } finally {
-                  setOneSignalTesting(false);
-                }
-              }}
-              className="px-4 py-2 rounded-xl bg-[var(--accent)] hover:opacity-90 font-bold text-xs text-white cursor-pointer transition-all shadow-xs disabled:opacity-50"
+              onClick={handleTestPartnerAlert}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] font-chunky text-xs font-bold text-white cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
             >
-              {oneSignalTesting ? 'Sending test...' : 'SEND TEST PUSH'}
+              <Bell className="w-4 h-4 shrink-0" />
+              <span>{oneSignalTesting ? 'Sending Alert...' : 'ALERT PARTNER 📲'}</span>
             </button>
           </div>
 
+          {deviceTestResult && (
+            <div className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
+              deviceTestResult.startsWith('✓')
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+            }`}>
+              {deviceTestResult}
+            </div>
+          )}
+
           {oneSignalTestResult && (
-            <span className="text-[11px] font-bold text-[var(--text)] block mt-1">
+            <div className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
+              oneSignalTestResult.startsWith('✓')
+                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+            }`}>
               {oneSignalTestResult}
-            </span>
+            </div>
           )}
 
           {/* Synchronized configuration info */}
@@ -1264,104 +1446,113 @@ export const SettingsModal: React.FC = () => {
           </button>
         </div>
       </div>
+      )}
 
       {/* 5. DESKTOP COMPANION WIDGET */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
-            <Laptop className="w-5 h-5 text-[var(--partner-b)]" />
-          </div>
-          <div>
-            <h3 className="font-chunky font-bold text-base text-[var(--text)]">Desktop Companion Widget</h3>
-            <p className="font-clean text-xs text-[var(--text-muted)]">
-              Pin a mini floating window on your computer screen
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={openDedicatedPopout}
-          className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer shrink-0 min-h-[44px]"
-        >
-          <ExternalLink className="w-3.5 h-3.5 text-[var(--partner-a)]" />
-          <span>Launch Popout</span>
-        </button>
-      </div>
-
-      {/* 6. PAIRING & SECURITY STATUS */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
-            <KeyRound className="w-5 h-5" />
-          </div>
-          <h2 className="text-xl font-chunky font-bold text-[var(--text)]">AV Private Space & Lock</h2>
-        </div>
-
-        <div className="bg-[var(--surface-2)] border-2 border-[var(--border)] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-          <div>
-            <div className="font-clean text-xs text-[var(--text-muted)] uppercase font-semibold mb-0.5">
-              Access Secret Code
+      {showPreferences && (
+        <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
+              <Laptop className="w-5 h-5 text-[var(--partner-b)]" />
             </div>
-            <div className="text-2xl sm:text-3xl font-numeric font-bold text-[var(--text)] tracking-widest">
-              {couple?.inviteCode || 'K7M2QX'}
-            </div>
-            <div className="font-clean text-xs text-[var(--partner-a)] font-bold mt-1">
-              {couple?.locked ? 'AV LOCKED: ARYAN & VIDHI ACTIVE' : 'WAITING FOR VIDHI / ARYAN'}
+            <div>
+              <h3 className="font-chunky font-bold text-base text-[var(--text)]">Desktop Companion Widget</h3>
+              <p className="font-clean text-xs text-[var(--text-muted)]">
+                Pin a mini floating window on your computer screen
+              </p>
             </div>
           </div>
 
           <button
-            onClick={handleCopyCode}
-            className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
+            type="button"
+            onClick={openDedicatedPopout}
+            className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface-2)] hover:bg-[var(--accent)]/30 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer shrink-0 min-h-[44px]"
           >
-            {copiedCode ? <Check className="w-4 h-4 text-[var(--success)]" /> : <Copy className="w-4 h-4" />}
-            <span>{copiedCode ? 'Copied! 🎉' : 'Copy Code'}</span>
+            <ExternalLink className="w-3.5 h-3.5 text-[var(--partner-a)]" />
+            <span>Launch Popout</span>
           </button>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 text-xs font-clean font-medium text-[var(--text)] bg-[var(--success)]/10 border-2 border-[var(--success)]/30 px-3.5 py-2.5 rounded-2xl">
-          <ShieldCheck className="w-4 h-4 text-[var(--success)] shrink-0" />
-          <span>Strict lock active: strictly private to Aryan & Vidhi.</span>
+      {/* 6. PAIRING & SECURITY STATUS */}
+      {showProfile && (
+        <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] min-w-0">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="w-9 h-9 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] shadow-[0_2px_0_var(--shadow-color)] shrink-0">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-chunky font-bold text-[var(--text)]">AV Private Space & Lock</h2>
+          </div>
+
+          <div className="bg-[var(--surface-2)] border-2 border-[var(--border)] rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+            <div>
+              <div className="font-clean text-xs text-[var(--text-muted)] uppercase font-semibold mb-0.5">
+                Access Secret Code
+              </div>
+              <div className="text-2xl sm:text-3xl font-numeric font-bold text-[var(--text)] tracking-widest">
+                {couple?.inviteCode || 'K7M2QX'}
+              </div>
+              <div className="font-clean text-xs text-[var(--partner-a)] font-bold mt-1">
+                {couple?.locked ? 'AV LOCKED: ARYAN & VIDHI ACTIVE' : 'WAITING FOR VIDHI / ARYAN'}
+              </div>
+            </div>
+
+            <button
+              onClick={handleCopyCode}
+              className="w-full sm:w-auto justify-center px-4 py-2.5 rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
+            >
+              {copiedCode ? <Check className="w-4 h-4 text-[var(--success)]" /> : <Copy className="w-4 h-4" />}
+              <span>{copiedCode ? 'Copied! 🎉' : 'Copy Code'}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-clean font-medium text-[var(--text)] bg-[var(--success)]/10 border-2 border-[var(--success)]/30 px-3.5 py-2.5 rounded-2xl">
+            <ShieldCheck className="w-4 h-4 text-[var(--success)] shrink-0" />
+            <span>Strict lock active: strictly private to Aryan & Vidhi.</span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 7. BACKUP & EXPORT */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-        <div>
-          <h3 className="font-chunky font-bold text-base text-[var(--text)] mb-0.5">Export Our Journey</h3>
-          <p className="font-clean text-xs text-[var(--text-muted)]">Download all our tasks, dreams, scores & chat logs</p>
-        </div>
+      {showPreferences && (
+        <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+          <div>
+            <h3 className="font-chunky font-bold text-base text-[var(--text)] mb-0.5">Export Our Journey</h3>
+            <p className="font-clean text-xs text-[var(--text-muted)]">Download all our tasks, dreams, scores & chat logs</p>
+          </div>
 
-        <button
-          onClick={handleExportData}
-          className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
-        >
-          <Download className="w-4 h-4" />
-          <span>Export JSON 📥</span>
-        </button>
-      </div>
+          <button
+            onClick={handleExportData}
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] text-[var(--text)] font-chunky font-bold text-xs flex items-center gap-1.5 shadow-[0_2px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none transition-all cursor-pointer min-h-[44px]"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export JSON 📥</span>
+          </button>
+        </div>
+      )}
 
       {/* 8. DANGER ZONE: ACCOUNT & SIGN OUT */}
-      <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
-        <div>
-          <h3 className="font-chunky font-bold text-base text-[var(--urgent)] mb-0.5">Danger Zone</h3>
-          <p className="font-clean text-xs text-[var(--text-muted)]">
-            Signed in as <span className="font-semibold text-[var(--text)]">{currentUser.displayName}</span>
-          </p>
-        </div>
+      {showProfile && (
+        <div className="bg-[var(--surface)] rounded-2xl sm:rounded-3xl p-4 sm:p-6 sm:p-7 border-3 border-[var(--border)] shadow-[0_4px_0_var(--shadow-color)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 min-w-0">
+          <div>
+            <h3 className="font-chunky font-bold text-base text-[var(--urgent)] mb-0.5">Danger Zone</h3>
+            <p className="font-clean text-xs text-[var(--text-muted)]">
+              Signed in as <span className="font-semibold text-[var(--text)]">{currentUser.displayName}</span>
+            </p>
+          </div>
 
-        <button
-          onClick={async () => {
-            await signOut();
-            window.location.reload();
-          }}
-          className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--urgent)]/10 hover:bg-[var(--urgent)]/20 border-2 border-[var(--urgent)] text-[var(--urgent)] font-chunky font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-[0_2px_0_var(--urgent)] min-h-[44px]"
-        >
-          <LogOut className="w-4 h-4" />
-          <span>Log Out</span>
-        </button>
-      </div>
+          <button
+            onClick={async () => {
+              await signOut();
+              window.location.reload();
+            }}
+            className="w-full sm:w-auto justify-center px-5 py-2.5 rounded-2xl bg-[var(--urgent)]/10 hover:bg-[var(--urgent)]/20 border-2 border-[var(--urgent)] text-[var(--urgent)] font-chunky font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-[0_2px_0_var(--urgent)] min-h-[44px]"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Log Out</span>
+          </button>
+        </div>
+      )}
       </div>
 
       {/* Sound Chooser Modal */}
