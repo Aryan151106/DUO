@@ -1,13 +1,14 @@
 import OneSignal from 'react-onesignal';
-import { httpsCallable } from 'firebase/functions';
-import { functions, auth, db } from './firebase';
+import { auth, db } from './firebase';
 import { useAuthStore } from './store';
+import { getSocketServerUrl } from './socketConfig';
 
 let initPromise: Promise<boolean> | null = null;
 let isInitialized = false;
 
 export interface OneSignalConfig {
   appId: string;
+  restApiKey?: string;
 }
 
 export interface SendPushResult {
@@ -21,26 +22,25 @@ export interface SendPushResult {
 
 export function getOneSignalConfig(): OneSignalConfig {
   const envAppId = (import.meta.env.VITE_ONESIGNAL_APP_ID || '').trim();
+  const envApiKey = (import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '').trim();
+  const localApiKey =
+    typeof window !== 'undefined' ? (localStorage.getItem('duo_onesignal_api_key') || '').trim() : '';
 
   // Authoritative production App ID synchronized between client and backend
   const appId = envAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb';
+  const restApiKey = envApiKey || localApiKey || '';
 
-  // Sanitize any legacy stored API key from localStorage to protect credentials
-  if (typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem('duo_onesignal_api_key');
-    } catch {}
-  }
-
-  return { appId };
+  return { appId, restApiKey };
 }
 
-export function saveOneSignalConfig(_appId?: string, _apiKey?: string) {
-  // Deprecated: API keys must only be stored in secure backend secret manager.
-  if (typeof window !== 'undefined') {
-    try {
+export function saveOneSignalConfig(_appId?: string, apiKey?: string) {
+  if (typeof window !== 'undefined' && apiKey !== undefined) {
+    const clean = apiKey.trim();
+    if (clean) {
+      localStorage.setItem('duo_onesignal_api_key', clean);
+    } else {
       localStorage.removeItem('duo_onesignal_api_key');
-    } catch {}
+    }
   }
 }
 
@@ -56,11 +56,6 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
   }
 
   if (typeof window === 'undefined') return false;
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  if (isLocal) {
-    console.info('[OneSignal] Localhost dev environment: push notifications active on production https://av-space-311906.web.app');
-    return false;
-  }
 
   if (isInitialized) {
     if (userId) {
@@ -97,9 +92,9 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
           console.info('[OneSignal] OneSignal SDK already initialized.');
           isInitialized = true;
         } else {
-          console.error('[OneSignal] OneSignal.init() failed with error:', err);
+          console.warn('[OneSignal] OneSignal.init() notice:', err);
           isInitialized = false;
-          initPromise = null; // Allow subsequent retry on genuine failure
+          initPromise = null; // Allow subsequent retry
           return false;
         }
       }
@@ -128,7 +123,7 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
     } catch (error) {
       console.error('[OneSignal] Initialization error:', error);
       isInitialized = false;
-      initPromise = null; // Allow retry on failure
+      initPromise = null;
       return false;
     }
   })();
@@ -136,19 +131,19 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
   return initPromise;
 }
 
-async function bindOneSignalUser(userId: string) {
+export async function bindOneSignalUser(userId: string) {
   try {
     const win = window as any;
-    if (win.OneSignal?.login) {
-      await win.OneSignal.login(userId);
-    } else if (OneSignal.login) {
-      await OneSignal.login(userId);
-    }
-    console.log('[OneSignal] User subscription successfully linked');
+    const sdk = win.OneSignal || OneSignal;
 
-    // If browser permission is already granted, verify push subscription opt-in
+    if (sdk.login) {
+      await sdk.login(userId);
+    }
+    console.log('[OneSignal] User subscription linked to UID:', userId);
+
+    // If browser permission is already granted, ensure push subscription opt-in
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
+      const sub = sdk.User?.PushSubscription;
       if (sub && !sub.optedIn && sub.optIn) {
         await sub.optIn();
       }
@@ -160,73 +155,101 @@ async function bindOneSignalUser(userId: string) {
 
 /**
  * Check if the current client is opted in and subscribed to OneSignal Web Push.
- * Verifies OneSignal's actual PushSubscription state, not just browser permission.
+ * Verifies OneSignal's actual PushSubscription state.
  */
 export function isOneSignalSubscribed(): boolean {
   if (typeof window === 'undefined') return false;
   const win = window as any;
-  const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
+  const sdk = win.OneSignal || OneSignal;
+  const sub = sdk.User?.PushSubscription;
   return Boolean(sub?.optedIn && sub?.id);
 }
 
 /**
- * Request system push notification permission via OneSignal tied to a user gesture.
+ * Returns full diagnostic state of the local OneSignal subscription.
+ */
+export function getOneSignalSubscriptionState(): {
+  isSupported: boolean;
+  permission: NotificationPermission | 'unsupported';
+  isInitialized: boolean;
+  isOptedIn: boolean;
+  subscriptionId: string | null;
+  externalId: string | null;
+} {
+  if (typeof window === 'undefined') {
+    return {
+      isSupported: false,
+      permission: 'unsupported',
+      isInitialized: false,
+      isOptedIn: false,
+      subscriptionId: null,
+      externalId: null,
+    };
+  }
+
+  const win = window as any;
+  const sdk = win.OneSignal || OneSignal;
+  const sub = sdk.User?.PushSubscription;
+  const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+
+  return {
+    isSupported: typeof Notification !== 'undefined' && 'serviceWorker' in navigator,
+    permission: perm,
+    isInitialized,
+    isOptedIn: Boolean(sub?.optedIn),
+    subscriptionId: sub?.id || null,
+    externalId: sdk.User?.externalId || null,
+  };
+}
+
+/**
+ * Request push notification permission via OneSignal SDK tied to a user gesture.
+ * Crucially invokes OneSignal.Notifications.requestPermission() so OneSignal registers
+ * the browser's pushManager token and generates the subscriber record on OneSignal's backend.
  */
 export async function requestOneSignalPermission(userId?: string): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  const { appId } = getOneSignalConfig();
+  if (!appId) {
+    if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission().catch(() => {});
+    }
+    return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+  }
+
+  if (!isInitialized) {
+    await initOneSignal(userId);
+  }
+
+  const win = window as any;
+  const sdk = win.OneSignal || OneSignal;
+
   try {
-    let nativePerm: NotificationPermission = 'default';
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      if (Notification.permission === 'default') {
-        try {
-          nativePerm = await Notification.requestPermission();
-        } catch (e) {
-          console.warn('[Notifications] Native Notification.requestPermission error:', e);
-        }
-      } else {
-        nativePerm = Notification.permission;
-      }
-    }
-
-    const { appId } = getOneSignalConfig();
-    if (!appId) {
-      return nativePerm === 'granted';
-    }
-
-    if (!isInitialized) {
-      await initOneSignal(userId);
-    }
-
-    const win = window as any;
-    if (nativePerm === 'default') {
-      try {
-        if (win.OneSignal?.Notifications?.requestPermission) {
-          await win.OneSignal.Notifications.requestPermission();
-        } else if (OneSignal.Notifications?.requestPermission) {
-          await OneSignal.Notifications.requestPermission();
-        }
-      } catch (err) {
-        console.warn('[OneSignal] SDK permission request notice:', err);
-      }
+    // 1. Explicitly invoke OneSignal SDK's requestPermission to run the full push registration lifecycle
+    if (sdk.Notifications?.requestPermission) {
+      await sdk.Notifications.requestPermission();
+    } else if ('Notification' in window && Notification.permission === 'default') {
+      await Notification.requestPermission();
     }
 
     const isGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
 
+    // 2. Opt-in push subscription
     if (isGranted) {
-      try {
-        const sub = win.OneSignal?.User?.PushSubscription || (OneSignal as any).User?.PushSubscription;
-        if (sub?.optIn) {
-          await sub.optIn();
-        }
-        if (userId) {
-          if (win.OneSignal?.login) {
-            await win.OneSignal.login(userId);
-          } else if (OneSignal.login) {
-            await OneSignal.login(userId);
-          }
-        }
-      } catch (e) {
-        console.warn('[OneSignal] Push optIn setup notice:', e);
+      const sub = sdk.User?.PushSubscription;
+      if (sub?.optIn) {
+        await sub.optIn();
       }
+
+      // 3. Link UID as OneSignal external_id
+      if (userId) {
+        if (sdk.login) {
+          await sdk.login(userId);
+        }
+      }
+
+      console.log(`[OneSignal] Registration complete. OptedIn: ${sub?.optedIn}, SubId: ${sub?.id || 'pending'}`);
     }
 
     return isGranted;
@@ -238,8 +261,8 @@ export async function requestOneSignalPermission(userId?: string): Promise<boole
 
 /**
  * Dispatch an OS-level Push Notification directly to partner's device via OneSignal.
- * Strictly delegates to the authenticated Cloud Function where the OneSignal REST API key
- * is stored securely in Firebase Secret Manager, never exposed to the client browser.
+ * Strictly uses ONLY OneSignal via our backend server (/api/push/send on Render).
+ * Absolutely NO Cloud Functions are used.
  */
 export async function sendOneSignalPush(params: {
   coupleId?: string;
@@ -274,64 +297,13 @@ export async function sendOneSignalPush(params: {
     };
   }
 
-  const startTime = Date.now();
+  const { restApiKey, appId } = getOneSignalConfig();
 
-  // 1. First attempt: Cloud Function (if deployed)
+  // 1. Dispatch through our Node.js backend server endpoint on Render
+  // The server calls OneSignal REST API without CORS restrictions
   try {
-    const sendPushFn = httpsCallable<
-      {
-        coupleId: string;
-        targetUserId: string;
-        title: string;
-        body: string;
-        type?: string;
-        deepLink?: string;
-        metadata?: Record<string, any>;
-        eventId?: string;
-        correlationId?: string;
-      },
-      {
-        success: boolean;
-        requestAccepted?: boolean;
-        notificationId?: string | null;
-        recipients?: number;
-        reason?: string;
-        correlationId?: string;
-      }
-    >(functions, 'sendPushNotification');
-
-    const response = await sendPushFn({
-      coupleId,
-      targetUserId,
-      title,
-      body,
-      type: type || 'message',
-      deepLink: deepLink || '/',
-      metadata,
-      eventId,
-      correlationId,
-    });
-
-    const resData = response.data;
-    if (resData?.requestAccepted) {
-      return {
-        success: Boolean(resData.success),
-        requestAccepted: true,
-        notificationId: resData.notificationId,
-        recipients: resData.recipients,
-        reason: resData.reason || 'accepted',
-        correlationId,
-      };
-    }
-  } catch (error: any) {
-    const latency = Date.now() - startTime;
-    console.info(`[OneSignal] Cloud Function dispatch notice (${latency}ms):`, error?.message || error);
-  }
-
-  // 2. Second attempt: Render socket / API server endpoint
-  try {
-    const { getSocketServerUrl } = await import('./socketConfig');
     const socketUrl = getSocketServerUrl();
+
     if (socketUrl && auth.currentUser) {
       const idToken = await auth.currentUser.getIdToken();
       const res = await fetch(`${socketUrl}/api/push/send`, {
@@ -349,29 +321,40 @@ export async function sendOneSignalPush(params: {
           deepLink: deepLink || '/',
           metadata,
           eventId,
+          apiKey: restApiKey || undefined,
+          appId,
         }),
       });
 
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data.requestAccepted || data.success) {
+          const recipients = typeof data.recipients === 'number' ? data.recipients : 1;
+          const isDeliveredToDevice = recipients > 0;
           return {
             success: true,
             requestAccepted: true,
             notificationId: data.notificationId || null,
-            recipients: data.recipients || 1,
-            reason: data.reason || 'server_accepted',
+            recipients,
+            reason: isDeliveredToDevice
+              ? 'onesignal_delivered'
+              : data.reason === 'no_push_key'
+              ? 'no_push_key'
+              : 'partner_not_subscribed',
             correlationId,
           };
         }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        console.warn('[OneSignal] Server returned error:', res.status, errData);
       }
     }
   } catch (socketErr: any) {
     console.info('[OneSignal] Socket server push notice:', socketErr?.message || socketErr);
   }
 
-  // 3. Resilient fallback: write to Firestore notifications collection
-  // Partner's active client is subscribed in real-time and will immediately display the alert!
+  // 2. Realtime fallback: record notification in Firestore
+  // Active partner app in background tab or foreground immediately displays the alert and plays audio
   try {
     if (!auth.currentUser) {
       return {
@@ -411,9 +394,8 @@ export async function sendOneSignalPush(params: {
     return {
       success: false,
       requestAccepted: false,
-      reason: dbErr?.message || 'push_fallback_failed',
+      reason: dbErr?.message || 'push_dispatch_failed',
       correlationId,
     };
   }
 }
-

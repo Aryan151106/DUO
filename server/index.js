@@ -354,8 +354,23 @@ app.post('/api/push/send', async (req, res) => {
       return res.status(403).json({ error: 'Forbidden: You are not authorized for this couple space.' });
     }
 
-    const oneSignalApiKey = (process.env.ONESIGNAL_REST_API_KEY || '').trim();
-    const oneSignalAppId = (process.env.ONESIGNAL_APP_ID || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
+    let oneSignalApiKey = (req.body?.apiKey || process.env.ONESIGNAL_REST_API_KEY || '').trim();
+    const oneSignalAppId = (req.body?.appId || process.env.ONESIGNAL_APP_ID || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
+
+    // If API key is not passed in body or env, check couple space document in Firestore
+    if (!oneSignalApiKey && db && coupleId) {
+      try {
+        const cSnap = await db.collection('couples').doc(coupleId).get();
+        if (cSnap.exists) {
+          const cData = cSnap.data() || {};
+          if (cData.oneSignalApiKey) {
+            oneSignalApiKey = String(cData.oneSignalApiKey).trim();
+          }
+        }
+      } catch (keyErr) {
+        console.warn('[Push] Firestore couple key lookup notice:', keyErr.message);
+      }
+    }
 
     let notificationId = null;
     let recipients = 0;
@@ -369,6 +384,9 @@ app.post('/api/push/send', async (req, res) => {
         ? `Key ${oneSignalApiKey}`
         : `Basic ${oneSignalApiKey}`;
 
+      const baseUrl = 'https://av-space-311906.web.app';
+      const notifUrl = deepLink ? (deepLink.startsWith('http') ? deepLink : `${baseUrl}${deepLink.startsWith('/') ? '' : '/'}${deepLink}`) : baseUrl;
+
       const payload = {
         app_id: oneSignalAppId,
         include_aliases: {
@@ -377,15 +395,18 @@ app.post('/api/push/send', async (req, res) => {
         target_channel: 'push',
         headings: { en: String(title).slice(0, 100) },
         contents: { en: String(body || '').slice(0, 300) },
+        chrome_web_icon: `${baseUrl}/pwa-192x192.png`,
+        chrome_web_badge: `${baseUrl}/logo.svg`,
         priority: 10,
         android_priority: 10,
         delayed_option: 'immediate',
         ttl: type === 'call' ? 120 : 86400,
+        url: notifUrl,
         data: {
           type,
           senderId: user.uid,
           targetUserId,
-          url: deepLink,
+          url: notifUrl,
           eventId,
           ...metadata,
         },
@@ -407,6 +428,35 @@ app.post('/api/push/send', async (req, res) => {
           recipients = typeof osData?.recipients === 'number' ? osData.recipients : 1;
           requestAccepted = true;
           reason = recipients > 0 ? 'accepted' : 'no_matching_subscription';
+
+          // If no matching subscription found via aliases, try external_user_ids fallback
+          if (recipients === 0) {
+            try {
+              const legacyPayload = {
+                ...payload,
+                include_aliases: undefined,
+                target_channel: undefined,
+                include_external_user_ids: [targetUserId],
+                channel_for_external_user_ids: 'push',
+              };
+              const legRes = await fetch('https://api.onesignal.com/notifications', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: authHeader,
+                },
+                body: JSON.stringify(legacyPayload),
+              });
+              if (legRes.ok) {
+                const legData = await legRes.json().catch(() => null);
+                if (typeof legData?.recipients === 'number' && legData.recipients > 0) {
+                  notificationId = legData.id;
+                  recipients = legData.recipients;
+                  reason = 'accepted_legacy';
+                }
+              }
+            } catch (legErr) {}
+          }
         } else {
           console.warn('[Push] OneSignal API notice:', osData);
           reason = osData?.errors?.[0] || `http_${osRes.status}`;

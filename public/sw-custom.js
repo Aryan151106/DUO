@@ -67,8 +67,25 @@ self.addEventListener('push', (event) => {
 
   try {
     const payload = event.data.json();
-    // OneSignal's SDK worker handles OneSignal notifications natively
+    // OneSignal's SDK worker handles OS notifications; notify active client windows for instant in-app audio
     if (payload && payload.custom && payload.custom.i) {
+      event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+          clientList.forEach((c) => {
+            try {
+              c.postMessage({
+                type: 'IN_APP_PUSH_EVENT',
+                payload: {
+                  title: payload.title || payload.headings?.en || 'AV Alert',
+                  body: payload.alert || payload.contents?.en || payload.body || 'New alert from your partner',
+                  data: (payload.custom && payload.custom.a) || payload.data || {},
+                  type: (payload.custom && payload.custom.a && payload.custom.a.type) || 'message',
+                },
+              });
+            } catch (postErr) {}
+          });
+        })
+      );
       return;
     }
     const title = payload.title || 'AV Alert';

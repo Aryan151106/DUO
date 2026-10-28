@@ -11,10 +11,15 @@ import { ThemeChooser } from './ThemeChooser';
 import { updateProfile } from '../../lib/firestore';
 import { SoundChooserModal } from './SoundChooserModal';
 import { InstallAppModal } from '../../components/InstallAppModal';
+import { db } from '../../lib/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useNotificationStore } from '../../lib/notifications';
 import {
   getOneSignalConfig,
+  saveOneSignalConfig,
   sendOneSignalPush,
+  requestOneSignalPermission,
+  getOneSignalSubscriptionState,
 } from '../../lib/oneSignal';
 import {
   Bell,
@@ -160,6 +165,56 @@ export const SettingsModal: React.FC = () => {
   const [oneSignalTesting, setOneSignalTesting] = useState(false);
   const [oneSignalTestResult, setOneSignalTestResult] = useState<string | null>(null);
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
+  const [subscribingPhone, setSubscribingPhone] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState(() => getOneSignalConfig().restApiKey || '');
+  const [apiKeySaved, setApiKeySaved] = useState(false);
+  const [osState, setOsState] = useState(() => getOneSignalSubscriptionState());
+
+  const refreshOsState = () => {
+    setOsState(getOneSignalSubscriptionState());
+  };
+
+  useEffect(() => {
+    refreshOsState();
+    const timer = setInterval(refreshOsState, 3500);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSubscribePhone = async () => {
+    setSubscribingPhone(true);
+    setDeviceTestResult(null);
+    try {
+      const ok = await requestOneSignalPermission(currentUser?.id);
+      refreshOsState();
+      if (ok) {
+        soundEngine.play('notification', { force: true });
+        setDeviceTestResult('✓ This phone is successfully registered with OneSignal push notifications!');
+      } else {
+        setDeviceTestResult('⚠️ Notification permission was not granted. Please allow notifications in browser/phone settings.');
+      }
+    } catch (e: any) {
+      setDeviceTestResult(`Subscription notice: ${e?.message || 'Could not complete subscription'}`);
+    } finally {
+      setSubscribingPhone(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    const cleanKey = apiKeyInput.trim();
+    saveOneSignalConfig(getOneSignalConfig().appId, cleanKey);
+    setApiKeySaved(true);
+    setTimeout(() => setApiKeySaved(false), 3000);
+
+    if (couple?.id && db) {
+      try {
+        await updateDoc(doc(db, 'couples', couple.id), {
+          oneSignalApiKey: cleanKey,
+        });
+      } catch (err) {
+        console.warn('[Settings] Could not save API key to Firestore couple space:', err);
+      }
+    }
+  };
 
   const handleTestLocalDevice = async () => {
     setDeviceTesting(true);
@@ -169,6 +224,9 @@ export const SettingsModal: React.FC = () => {
         setDeviceTestResult('Push notifications are not supported by this browser.');
         return;
       }
+
+      // Explicitly trigger OneSignal registration in parallel
+      void requestOneSignalPermission(currentUser?.id).catch(() => {});
 
       let perm = Notification.permission;
       if (perm === 'default') {
@@ -194,8 +252,8 @@ export const SettingsModal: React.FC = () => {
           if (reg && reg.showNotification) {
             await reg.showNotification('🔔 AV Duo Device Alert', {
               body: 'Push alerts and sounds are working properly on this device! ✨',
-              icon: '/icons/icon-192.png',
-              badge: '/icons/icon-192.png',
+              icon: '/pwa-192x192.png',
+              badge: '/logo.svg',
               tag: 'duo-device-test',
               vibrate: [200, 100, 200],
               data: { url: '/' },
@@ -210,11 +268,12 @@ export const SettingsModal: React.FC = () => {
       if (!swSuccess) {
         new Notification('🔔 AV Duo Device Alert', {
           body: 'Push alerts and sounds are working properly on this device! ✨',
-          icon: '/icons/icon-192.png',
+          icon: '/pwa-192x192.png',
         });
       }
 
-      setDeviceTestResult('✓ Notification delivered to your phone! Check notification bar.');
+      refreshOsState();
+      setDeviceTestResult('✓ Notification delivered to your phone! Check your notification bar.');
     } catch (err: any) {
       setDeviceTestResult(`Device test error: ${err?.message || 'Could not display alert'}`);
     } finally {
@@ -244,8 +303,12 @@ export const SettingsModal: React.FC = () => {
       });
 
       if (res.requestAccepted || res.success) {
-        if (res.reason === 'server_accepted' || res.notificationId) {
+        if (res.reason === 'onesignal_delivered' || (res.recipients && res.recipients > 0)) {
           setOneSignalTestResult(`✓ Push alert sent to ${partnerName}'s phone via OneSignal!`);
+        } else if (res.reason === 'partner_not_subscribed' || res.recipients === 0) {
+          setOneSignalTestResult(`⚠️ Sent to OneSignal, but ${partnerName}'s device is not subscribed yet. ${partnerName} must open the app and tap "Enable Notifications".`);
+        } else if (res.reason === 'no_push_key') {
+          setOneSignalTestResult(`⚠️ OneSignal REST API Key missing. Enter your key in Push Diagnostics below.`);
         } else if (res.reason === 'realtime_synced') {
           setOneSignalTestResult(`✓ Real-time alert dispatched to ${partnerName}!`);
         } else if (res.reason === 'demo_synced') {
@@ -811,7 +874,7 @@ export const SettingsModal: React.FC = () => {
           )}
         </div>
 
-        {/* ONESIGNAL FREE BACKGROUND PUSH (100% AUTOMATIC / NO MANUAL SETUP) */}
+        {/* ONESIGNAL FREE BACKGROUND PUSH (100% ONE SIGNAL / NO CLOUD FUNCTIONS) */}
         <div className="p-4 sm:p-5 rounded-2xl bg-[var(--surface)] border-2 border-[var(--border)] shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b-2 border-[var(--border)]">
             <div className="flex items-center gap-2">
@@ -820,68 +883,98 @@ export const SettingsModal: React.FC = () => {
                 Background Push Notifications
               </h3>
             </div>
-            <span className="text-[11px] font-ui font-bold px-2.5 py-0.5 rounded-full border bg-emerald-500/15 text-emerald-600 border-emerald-500/30 shrink-0 whitespace-nowrap self-start sm:self-center">
-              Automated & Active ✓
+            <span
+              className={`text-[11px] font-ui font-bold px-2.5 py-0.5 rounded-full border shrink-0 whitespace-nowrap self-start sm:self-center ${
+                osState.isOptedIn && osState.subscriptionId
+                  ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+              }`}
+            >
+              {osState.isOptedIn && osState.subscriptionId ? 'Phone Subscribed ✓' : 'Tap to Subscribe 🔔'}
             </span>
           </div>
 
           <p className="font-clean text-xs text-[var(--text-muted)] leading-relaxed">
-            Calls, messages, and nudges wake up the other person's phone even when the AV app is completely closed or locked. Powered automatically via OneSignal Web Push — <strong>no manual connection or credit card needed</strong>.
+            Calls, messages, and nudges wake up your phone even when the app is completely closed or locked. Powered via <strong>OneSignal Web Push</strong> without any Firebase Cloud Functions.
           </p>
 
           <div className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] space-y-2 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Background Push Service:</span>
+              <span className="text-[var(--text-muted)]">Push Engine:</span>
               <span className="font-bold text-emerald-600 flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Automated & Ready
+                <Check className="w-3.5 h-3.5" /> OneSignal (Direct Dispatch)
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">TARGET USER:</span>
+              <span className="text-[var(--text-muted)]">This Device Status:</span>
+              <span className={`font-bold flex items-center gap-1 ${osState.isOptedIn && osState.subscriptionId ? 'text-emerald-600' : 'text-amber-600'}`}>
+                {osState.isOptedIn && osState.subscriptionId ? 'Subscribed & Active' : 'Not Subscribed Yet'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Target Partner:</span>
               <span className="font-bold text-[var(--text)]">
-                {partnerUser?.displayName || 'Vidhi'}
+                {partnerUser?.displayName || 'Partner'}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+            <button
+              type="button"
+              disabled={subscribingPhone}
+              onClick={handleSubscribePhone}
+              className={`px-3 py-2.5 rounded-xl border-2 font-chunky text-xs font-bold transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] cursor-pointer disabled:opacity-50 ${
+                osState.isOptedIn && osState.subscriptionId
+                  ? 'bg-[var(--surface-2)] text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface)]'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+              }`}
+            >
+              <Smartphone className="w-4 h-4 shrink-0" />
+              <span>{subscribingPhone ? 'Subscribing...' : osState.isOptedIn && osState.subscriptionId ? 'SUBSCRIBED ✓' : 'SUBSCRIBE PHONE 📲'}</span>
+            </button>
+
             <button
               type="button"
               disabled={deviceTesting}
               onClick={handleTestLocalDevice}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] hover:text-white border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
+              className="px-3 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] hover:text-white border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
             >
-              <Smartphone className="w-4 h-4 shrink-0" />
-              <span>{deviceTesting ? 'Testing Device...' : 'TEST THIS DEVICE 🔔'}</span>
+              <Bell className="w-4 h-4 shrink-0" />
+              <span>{deviceTesting ? 'Testing...' : 'TEST THIS PHONE 🔔'}</span>
             </button>
 
             <button
               type="button"
               disabled={oneSignalTesting}
               onClick={handleTestPartnerAlert}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] font-chunky text-xs font-bold text-white cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
+              className="px-3 py-2.5 rounded-xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] font-chunky text-xs font-bold text-white cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
             >
-              <Bell className="w-4 h-4 shrink-0" />
-              <span>{oneSignalTesting ? 'Sending Alert...' : 'ALERT PARTNER 📲'}</span>
+              <Sparkles className="w-4 h-4 shrink-0" />
+              <span>{oneSignalTesting ? 'Alerting...' : 'ALERT PARTNER 💌'}</span>
             </button>
           </div>
 
           {deviceTestResult && (
-            <div className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
-              deviceTestResult.startsWith('✓')
-                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-            }`}>
+            <div
+              className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
+                deviceTestResult.startsWith('✓')
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+              }`}
+            >
               {deviceTestResult}
             </div>
           )}
 
           {oneSignalTestResult && (
-            <div className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
-              oneSignalTestResult.startsWith('✓')
-                ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-            }`}>
+            <div
+              className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
+                oneSignalTestResult.startsWith('✓')
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+              }`}
+            >
               {oneSignalTestResult}
             </div>
           )}
@@ -889,17 +982,57 @@ export const SettingsModal: React.FC = () => {
           {/* Synchronized configuration info */}
           <details className="text-[11px] text-[var(--text-muted)] pt-1">
             <summary className="cursor-pointer hover:text-[var(--text)] font-semibold select-none">
-              Push Diagnostics & App Configuration
+              Push Diagnostics & REST API Configuration
             </summary>
-            <div className="mt-3 space-y-2 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+            <div className="mt-3 space-y-3 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
               <div>
                 <label className="block mb-1 font-bold">Synchronized OneSignal App ID</label>
                 <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text-muted)] truncate select-all">
                   {getOneSignalConfig().appId}
                 </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 font-bold">OneSignal REST API Key (Optional Override)</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    placeholder="Enter OneSignal REST API key (e.g. os_v2_app_...)"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveApiKey}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[11px] font-bold cursor-pointer hover:opacity-90 shrink-0"
+                  >
+                    Save Key
+                  </button>
+                </div>
+                {apiKeySaved && (
+                  <span className="text-[10px] text-emerald-600 font-bold block mt-1">
+                    ✓ API Key saved to couple space & local storage!
+                  </span>
+                )}
                 <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                  Active production App ID synchronized between client PWA and Firebase Cloud Functions.
+                  Obtain from OneSignal Dashboard → App Settings → Keys & IDs. Passed directly to push server.
                 </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
+                <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[var(--text-muted)]">Phone Subscription ID:</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block">
+                    {osState.subscriptionId || 'None (tap "Subscribe Phone")'}
+                  </span>
+                </div>
+                <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[var(--text-muted)]">My OneSignal ID:</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block">
+                    {currentUser?.id || 'Not logged in'}
+                  </span>
+                </div>
               </div>
             </div>
           </details>
