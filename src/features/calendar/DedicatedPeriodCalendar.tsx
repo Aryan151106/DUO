@@ -92,6 +92,7 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
 
   // Selected date on the calendar to view past logs
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(new Date());
+  const [activeTab, setActiveTab] = useState<'calendar' | 'feelings'>('calendar');
 
   if (!isOpen) return null;
 
@@ -341,24 +342,24 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="card max-w-4xl w-full p-5 sm:p-7 relative border-3 border-[var(--border)] shadow-[0_6px_0_var(--shadow-color)] my-auto max-h-[92vh] overflow-y-auto scrollbar-none"
+        className="card max-w-4xl w-full p-3.5 sm:p-7 relative border-3 border-[var(--border)] shadow-[0_6px_0_var(--shadow-color)] my-auto max-h-[94vh] overflow-y-auto scrollbar-none"
       >
         {/* Top Header */}
-        <div className="flex items-start justify-between gap-4 pb-4 border-b-2 border-[var(--border)]">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border-2 border-rose-500/40 flex items-center justify-center text-rose-500">
-              <CalendarHeart className="w-6 h-6 stroke-[2.5]" />
+        <div className="flex items-start justify-between gap-2.5 sm:gap-4 pb-3 sm:pb-4 border-b-2 border-[var(--border)]">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-rose-500/20 border-2 border-rose-500/40 flex items-center justify-center text-rose-500 shrink-0">
+              <CalendarHeart className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="font-display text-2xl font-bold text-[var(--text)]">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="font-display text-base sm:text-2xl font-bold text-[var(--text)] truncate">
                   Period Tracker & Cycle Calendar
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-chunky font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-chunky font-bold bg-rose-500/15 text-rose-500 border border-rose-500/30 whitespace-nowrap">
                   Shared Privately 🌸
                 </span>
               </div>
-              <p className="text-xs font-ui text-[var(--text-muted)] mt-0.5">
+              <p className="text-[11px] sm:text-xs font-ui text-[var(--text-muted)] mt-0.5 line-clamp-1 sm:line-clamp-none">
                 Always accessible to both partners so you stay in sync, understand her cycle, and care for each other.
               </p>
             </div>
@@ -367,91 +368,121 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5 stroke-[2.5]" />
           </button>
         </div>
 
-        {/* Cycle Phase & Quick Stats Row */}
+        {/* Cycle Phase & Quick Stats Row - Horizontal 3-Column Grid */}
         {tracker?.lastPeriodDate && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-5">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3.5 my-3 sm:my-5">
             {/* 1. Current Phase Card */}
-            <div className="p-4 rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center gap-3">
-              <span className="text-3xl">{phaseEmoji}</span>
-              <div>
-                <span className="text-[11px] font-ui font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                  Current Phase
+            <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center gap-1.5 sm:gap-3 min-w-0">
+              <span className="text-xl sm:text-3xl shrink-0">{phaseEmoji}</span>
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[11px] font-ui font-bold uppercase tracking-wider text-[var(--text-muted)] truncate block">
+                  Phase
                 </span>
-                <h4 className="font-chunky text-base font-bold text-[var(--text)] leading-tight">
+                <h4 className="font-chunky text-xs sm:text-base font-bold text-[var(--text)] leading-tight truncate">
                   {phaseName}
                 </h4>
-                <p className="text-[11px] font-ui text-[var(--text-muted)] mt-0.5 line-clamp-1">
+                <p className="text-[11px] font-ui text-[var(--text-muted)] mt-0.5 line-clamp-1 hidden md:block">
                   {phaseDesc}
                 </p>
               </div>
             </div>
 
             {/* 2. Cycle Day Card */}
-            <div className="p-4 rounded-2xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-500 font-bold font-numeric text-base">
+            <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-rose-500/10 border-2 border-rose-500/30 flex items-center gap-1.5 sm:gap-3 min-w-0">
+              <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-500 font-bold font-numeric text-xs sm:text-base shrink-0">
                 {dayOfCycle ? dayOfCycle : '—'}
               </div>
-              <div>
-                <span className="text-[11px] font-ui font-bold uppercase tracking-wider text-rose-500">
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[11px] font-ui font-bold uppercase tracking-wider text-rose-500 truncate block">
                   Cycle Day
                 </span>
-                <h4 className="font-chunky text-base font-bold text-[var(--text)] leading-tight">
-                  {dayOfCycle ? `Day ${dayOfCycle} of ${tracker.cycleLength}` : 'Calculating...'}
+                <h4 className="font-chunky text-xs sm:text-base font-bold text-[var(--text)] leading-tight truncate">
+                  {dayOfCycle ? `Day ${dayOfCycle}` : 'Calc...'}
                 </h4>
-                <p className="text-[11px] font-ui text-[var(--text-muted)] mt-0.5">
-                  Last started {format(parseISO(tracker.lastPeriodDate), 'MMM d')}
+                <p className="text-[10px] sm:text-[11px] font-ui text-[var(--text-muted)] mt-0.5 truncate hidden sm:block">
+                  Last: {format(parseISO(tracker.lastPeriodDate), 'MMM d')}
                 </p>
               </div>
             </div>
 
             {/* 3. Estimated Next Period */}
-            <div className="p-4 rounded-2xl bg-[var(--surface)] border-2 border-[var(--border)] flex items-center justify-between gap-2">
-              <div>
-                <span className="text-[11px] font-ui font-bold uppercase tracking-wider text-[var(--text-muted)]">
-                  Next Period Estimate
+            <div className="p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-[var(--surface)] border-2 border-[var(--border)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-2 min-w-0">
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[11px] font-ui font-bold uppercase tracking-wider text-[var(--text-muted)] truncate block">
+                  Next Due
                 </span>
-                <h4 className="font-chunky text-base font-bold text-[var(--text)] leading-tight">
-                  {nextStart ? format(nextStart, 'MMM d, yyyy') : '—'}
+                <h4 className="font-chunky text-xs sm:text-base font-bold text-[var(--text)] leading-tight truncate">
+                  {daysUntilNext !== null && daysUntilNext >= 0 ? `in ~${daysUntilNext}d` : nextStart ? format(nextStart, 'MMM d') : '—'}
                 </h4>
-                <p className="text-[11px] font-ui text-[var(--text-muted)] mt-0.5">
-                  {daysUntilNext !== null && daysUntilNext >= 0
-                    ? `in ~${daysUntilNext} days`
-                    : 'due soon'}
-                </p>
               </div>
               {isFemale && (
                 <button
                   type="button"
                   onClick={handlePeriodStartedToday}
-                  className="px-2.5 py-1.5 rounded-xl bg-rose-500 text-white text-[11px] font-chunky font-bold hover:opacity-90 shadow-xs cursor-pointer shrink-0"
+                  className="px-2 py-0.5 sm:py-1 rounded-lg sm:rounded-xl bg-rose-500 text-white text-[9px] sm:text-[11px] font-chunky font-bold hover:opacity-90 shadow-xs cursor-pointer shrink-0 truncate"
+                  title="Period started today"
                 >
-                  Started Today 🩸
+                  Started 🩸
                 </button>
               )}
             </div>
           </div>
         )}
 
-        {/* MAIN BODY: 2 Columns (Left: Interactive Month Grid, Right: Feelings/Cravings Panel) */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-6 mt-4">
+        {/* Mobile Navigation Tabs: Cycle Calendar vs Cravings/Care */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-[var(--surface-2)] rounded-2xl border-2 border-[var(--border)] lg:hidden my-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              soundEffects.playPop();
+              setActiveTab('calendar');
+            }}
+            className={`py-2 text-xs font-chunky font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === 'calendar'
+                ? 'bg-rose-500 text-white border-2 border-rose-600 shadow-xs'
+                : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <CalendarHeart className="w-3.5 h-3.5" />
+            <span>Cycle Calendar 📅</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              soundEffects.playPop();
+              setActiveTab('feelings');
+            }}
+            className={`py-2 text-xs font-chunky font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeTab === 'feelings'
+                ? 'bg-rose-500 text-white border-2 border-rose-600 shadow-xs'
+                : 'text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            <Heart className="w-3.5 h-3.5" />
+            <span>{isFemale ? 'Feelings & Cravings 🌸' : 'Care & Updates 💖'}</span>
+          </button>
+        </div>
+
+        {/* MAIN BODY: 2 Columns on Desktop, Tabbed on Mobile */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-6 mt-3">
           {/* LEFT: Dedicated Calendar Grid */}
-          <div className="space-y-4">
+          <div className={activeTab === 'calendar' ? 'space-y-4' : 'hidden lg:block space-y-4'}>
             {/* Month Switcher Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h3 className="font-chunky text-lg font-bold text-[var(--text)]">
+                <h3 className="font-chunky text-base sm:text-lg font-bold text-[var(--text)]">
                   {format(currentMonth, 'MMMM yyyy')}
                 </h3>
                 <button
                   type="button"
                   onClick={() => setCurrentMonth(new Date())}
-                  className="px-2 py-0.5 rounded-lg bg-[var(--surface-2)] text-[11px] font-ui font-semibold text-[var(--text-muted)] hover:text-[var(--text)]"
+                  className="px-2 py-0.5 rounded-lg bg-[var(--surface-2)] text-[10px] sm:text-[11px] font-ui font-semibold text-[var(--text-muted)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Today
                 </button>
@@ -477,15 +508,21 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
               </div>
             </div>
 
-            {/* Days of week header */}
-            <div className="grid grid-cols-7 gap-1 text-center font-ui font-bold text-[11px] text-[var(--text-muted)] py-1 uppercase tracking-wider">
+            {/* Days of week header (Guaranteed 7 Columns) */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+              className="gap-1 text-center font-ui font-bold text-[10px] sm:text-[11px] text-[var(--text-muted)] py-1 uppercase tracking-wider"
+            >
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
                 <div key={d}>{d}</div>
               ))}
             </div>
 
-            {/* Calendar Days Matrix */}
-            <div className="grid grid-cols-7 gap-1.5">
+            {/* Calendar Days Matrix (Guaranteed 7 Columns) */}
+            <div
+              style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}
+              className="gap-1 sm:gap-1.5"
+            >
               {daysInGrid.map((day) => {
                 const isCurMonth = isSameMonth(day, currentMonth);
                 const isSelected = isSameDay(day, selectedCalendarDate);
@@ -520,7 +557,7 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
                       soundEffects.playPop();
                       setSelectedCalendarDate(day);
                     }}
-                    className={`h-14 sm:h-16 rounded-xl border p-1 sm:p-1.5 flex flex-col justify-between transition-all cursor-pointer relative ${cellBg} ${cellBorder} ${
+                    className={`h-11 sm:h-16 rounded-lg sm:rounded-xl border p-0.5 sm:p-1.5 flex flex-col justify-between transition-all cursor-pointer relative min-w-0 overflow-hidden ${cellBg} ${cellBorder} ${
                       !isCurMonth ? 'opacity-35' : ''
                     }`}
                   >
@@ -690,7 +727,7 @@ export const DedicatedPeriodCalendar: React.FC<DedicatedPeriodCalendarProps> = (
           </div>
 
           {/* RIGHT: Describe Feelings & Cravings Panel (Exclusive to Female Partner) */}
-          <div className="space-y-4">
+          <div className={activeTab === 'feelings' ? 'space-y-4' : 'hidden lg:block space-y-4'}>
             {isFemale ? (
               /* FEMALE USER INTERFACE: Full Logging & Instant Sharing */
               <div className="p-5 rounded-3xl bg-[var(--surface-2)] border-3 border-rose-500/40 shadow-xs space-y-4">
