@@ -2,10 +2,7 @@ import React, { useState } from 'react';
 import { Chess } from 'chess.js';
 import type { GameSession, ChessState } from '../../../lib/games/types';
 import { getLegalMovesForSquare, isPromotionMove } from '../../../lib/games/engines/chessEngine';
-import {
-  GoofyChessPiece,
-  CHESS_VICTIM_LINES,
-} from '../../../lib/games/arcadeAssets';
+import { GoofyChessPiece } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 
 interface ChessBoardProps {
@@ -30,7 +27,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoves, setLegalMoves] = useState<Array<{ from: string; to: string }>>([]);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
-  const [capturedBubble, setCapturedBubble] = useState<{ text: string; x: number; y: number } | null>(null);
   const [moving, setMoving] = useState(false);
 
   const state = session.state as ChessState;
@@ -90,15 +86,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLegalMoves([]);
     setPendingPromotion(null);
 
-    // Check if target has a piece to trigger funny capture bubble
-    const targetPiece = chess.get(to as any);
-    if (targetPiece) {
-      const victimLines = CHESS_VICTIM_LINES[targetPiece.type.toUpperCase()] || ['Oof!'];
-      const randomLine = victimLines[Math.floor(Math.random() * victimLines.length)];
-      setCapturedBubble({ text: randomLine, x: 50, y: 50 });
-      setTimeout(() => setCapturedBubble(null), 2000);
-    }
-
     try {
       await onMove({ from, to, promotion });
     } catch (e) {
@@ -109,7 +96,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-3 relative">
+    <div className="flex flex-col items-center w-full max-w-[min(98vw,560px)] mx-auto space-y-2 relative px-0.5 sm:px-0">
       {/* Header Info */}
       <div className="w-full text-center">
         {!isFinished ? (
@@ -165,14 +152,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       </div>
 
       {/* 8x8 Chessboard */}
-      <div className="relative p-2 bg-[#2b2140] border-[4px] border-[var(--arcade-ink)] rounded-2xl shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[390px]">
-        {/* Floating Speech Bubble on Capture */}
-        {capturedBubble && (
-          <div className="arcade-speech-bubble top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            {capturedBubble.text}
-          </div>
-        )}
-
+      <div className="relative p-1.5 sm:p-2.5 bg-[#2b2140] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(98vw,520px)]">
         <div className="grid grid-cols-8 grid-rows-8 w-full h-full border-2 border-[var(--arcade-ink)] rounded-lg overflow-hidden">
           {rows.map((r) =>
             cols.map((c) => {

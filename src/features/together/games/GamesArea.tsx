@@ -6,7 +6,7 @@ import { ConnectFourBoard } from './ConnectFourBoard';
 import { ChessBoard } from './ChessBoard';
 import { DoodleBoard } from './DoodleBoard';
 import { GameStatsModal } from './GameStatsModal';
-import { MASCOT_JOKES, FLOATING_EMOJIS } from '../../../lib/games/arcadeAssets';
+import { FLOATING_EMOJIS } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 import '../../../lib/games/arcadeTheme.css';
 
@@ -57,7 +57,6 @@ const GAMES_LIST: GameCardMeta[] = [
 export const GamesArea: React.FC = () => {
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedMode, setSelectedMode] = useState<GameMode>('online');
-  const [mascotQuote, setMascotQuote] = useState<string>('Pick a game, human!');
   const [isMascotWobbling, setIsMascotWobbling] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEditingNames, setIsEditingNames] = useState(false);
@@ -70,8 +69,6 @@ export const GamesArea: React.FC = () => {
   const activeSessionHook = useGameSession(selectedGame || 'tic-tac-toe', selectedMode);
 
   const handleMascotPoke = () => {
-    const randomJoke = MASCOT_JOKES[Math.floor(Math.random() * MASCOT_JOKES.length)];
-    setMascotQuote(randomJoke);
     setIsMascotWobbling(true);
     setTimeout(() => setIsMascotWobbling(false), 500);
   };
@@ -89,7 +86,7 @@ export const GamesArea: React.FC = () => {
   };
 
   return (
-    <div className="silly-arcade w-full max-w-4xl mx-auto px-2 sm:px-4 py-2 sm:py-6 relative overflow-hidden min-h-[600px]">
+    <div className="silly-arcade w-full max-w-4xl mx-auto px-0.5 sm:px-4 py-1 sm:py-4 relative overflow-hidden min-h-[600px]">
       {/* Floating game decorations */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden select-none -z-0">
         {FLOATING_EMOJIS.slice(0, 8).map((emoji, i) => (
@@ -108,77 +105,84 @@ export const GamesArea: React.FC = () => {
       </div>
 
       {/* Main Container */}
-      <div className="relative z-10 space-y-6">
-        {/* Arcade Mascot & Title Banner */}
-        <div className="text-center space-y-1">
-          <div
-            onClick={handleMascotPoke}
-            className={`arcade-mascot text-5xl sm:text-6xl inline-block cursor-pointer select-none ${
-              isMascotWobbling ? 'arcade-wobble' : ''
-            }`}
-            title="Poke me for a joke!"
-          >
-            🤪
-          </div>
-
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-[var(--arcade-ink)] flex items-center justify-center gap-2">
-            <span>Silly Arcade</span>
-            <span className="text-xl sm:text-2xl">🎮</span>
-          </h2>
-
-          <p className="font-extrabold text-sm sm:text-base text-[var(--arcade-ink)] opacity-90 transition-all min-h-[1.5em]">
-            "{mascotQuote}"
-          </p>
-
-          <div className="flex items-center justify-center gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setIsStatsOpen(true)}
-              className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-4"
+      <div className="relative z-10 space-y-3 sm:space-y-6">
+        {/* Arcade Mascot & Title Banner (Only on Games Hub to save maximum screen space on mobile during gameplay) */}
+        {!selectedGame && (
+          <div className="text-center space-y-1">
+            <div
+              onClick={handleMascotPoke}
+              className={`arcade-mascot text-5xl sm:text-6xl inline-block cursor-pointer select-none ${
+                isMascotWobbling ? 'arcade-wobble' : ''
+              }`}
             >
-              <GoogleIcon name="emoji_events" size={16} />
-              <span>Streaks & Records 🏆</span>
-            </button>
+              🤪
+            </div>
 
-            {selectedMode === 'local' && (
+            <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-[var(--arcade-ink)] flex items-center justify-center gap-2">
+              <span>Silly Arcade</span>
+              <span className="text-xl sm:text-2xl">🎮</span>
+            </h2>
+
+            <div className="flex items-center justify-center gap-2 pt-1">
               <button
                 type="button"
-                onClick={handleOpenEditNames}
-                className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-4 bg-white"
+                onClick={() => setIsStatsOpen(true)}
+                className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-4"
               >
-                <GoogleIcon name="edit" size={16} />
-                <span>Player Names</span>
+                <GoogleIcon name="emoji_events" size={16} />
+                <span>Streaks & Records 🏆</span>
               </button>
-            )}
-          </div>
-        </div>
 
-        {/* ── Active Game View ── */}
+              {selectedMode === 'local' && (
+                <button
+                  type="button"
+                  onClick={handleOpenEditNames}
+                  className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-4 bg-white"
+                >
+                  <GoogleIcon name="edit" size={16} />
+                  <span>Player Names</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Active Game View (Maximized for Mobile View) ── */}
         {selectedGame ? (
-          <div className="arcade-card p-4 sm:p-6 w-full max-w-xl mx-auto space-y-4">
+          <div className="arcade-card p-2 sm:p-5 w-full max-w-full sm:max-w-2xl mx-auto space-y-3 shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)]">
             {/* Top Bar with Mode Indicator & Exit */}
-            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-3">
+            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-2 px-1">
               <div className="flex items-center gap-2">
                 <span className="text-2xl">
                   {GAMES_LIST.find((g) => g.type === selectedGame)?.icon}
                 </span>
                 <div>
-                  <h3 className="font-black text-lg sm:text-xl text-[var(--arcade-ink)]">
+                  <h3 className="font-black text-base sm:text-xl text-[var(--arcade-ink)] leading-tight">
                     {GAMES_LIST.find((g) => g.type === selectedGame)?.title}
                   </h3>
-                  <span className="text-xs font-bold text-[var(--arcade-ink)] opacity-75">
+                  <span className="text-[11px] sm:text-xs font-bold text-[var(--arcade-ink)] opacity-75">
                     {selectedMode === 'online' ? '🌐 Online Mode' : '📱 Local Pass-and-Play'}
                   </span>
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setSelectedGame(null)}
-                className="arcade-btn py-1 px-3 text-xs bg-white"
-              >
-                All Games
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsStatsOpen(true)}
+                  className="arcade-btn py-1 px-2.5 text-xs bg-white"
+                  title="View Streaks"
+                >
+                  🏆
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedGame(null)}
+                  className="arcade-btn py-1 px-3 text-xs bg-white"
+                >
+                  All Games
+                </button>
+              </div>
             </div>
 
             {/* Waiting / Connecting State for Online */}

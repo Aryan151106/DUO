@@ -45,11 +45,11 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-sm mx-auto space-y-4">
+    <div className="flex flex-col items-center w-full max-w-[min(98vw,480px)] mx-auto space-y-3 px-1 sm:px-0">
       {/* Turn & Status Header */}
       <div className="w-full text-center">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-base">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
             <span className="text-xl">
               {currentTurnPlayer?.role === 'X' ? '❌' : '⭕'}
             </span>
@@ -75,8 +75,8 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
         )}
       </div>
 
-      {/* 3x3 Grid */}
-      <div className="grid grid-cols-3 gap-3 p-3 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-3xl shadow-[5px_5px_0_var(--arcade-ink)] w-full aspect-square">
+      {/* 3x3 Grid - Maximized for Mobile Screen */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 p-2 sm:p-4 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-3xl shadow-[5px_5px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(98vw,460px)]">
         {board.map((cell, idx) => {
           const isWinningCell = winningLine.includes(idx);
           const cellColor =
@@ -92,7 +92,7 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
               type="button"
               disabled={isFinished || !!cell || (!isMyTurn && session.mode === 'online') || moving}
               onClick={() => handleCellClick(idx)}
-              className={`aspect-square rounded-2xl border-[3px] border-[var(--arcade-ink)] font-black text-4xl sm:text-5xl flex items-center justify-center transition-all cursor-pointer ${cellColor} ${
+              className={`aspect-square rounded-2xl border-[3px] border-[var(--arcade-ink)] font-black text-5xl sm:text-6xl flex items-center justify-center transition-all cursor-pointer ${cellColor} ${
                 cell ? 'arcade-ttt-stamp' : ''
               } ${isWinningCell ? 'arcade-dance ring-4 ring-[#ffc233]' : ''} ${
                 !cell && isMyTurn ? 'hover:scale-105 active:scale-95' : ''

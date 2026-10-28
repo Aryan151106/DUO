@@ -58,11 +58,11 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-md mx-auto space-y-4">
+    <div className="flex flex-col items-center w-full max-w-[min(98vw,520px)] mx-auto space-y-2 px-0.5 sm:px-0">
       {/* Header */}
       <div className="w-full text-center">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-base">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
             <span
               className={`w-5 h-5 rounded-full border-2 border-[var(--arcade-ink)] inline-block ${
                 currentTurnPlayer?.role === 'r' ? 'bg-[#ff3d5a]' : 'bg-[#ffd23a]'
@@ -90,29 +90,29 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         )}
       </div>
 
-      {/* Column Drop Touch Targets */}
-      <div className="grid grid-cols-7 gap-1.5 w-full max-w-[380px] px-2">
+      {/* Column Drop Touch Targets - Expanded for Mobile */}
+      <div className="grid grid-cols-7 gap-1 sm:gap-1.5 w-full max-w-[min(98vw,480px)] px-0.5 sm:px-2">
         {Array.from({ length: C4_COLS }).map((_, c) => (
           <button
             key={c}
             type="button"
             disabled={isFinished || (!isMyTurn && session.mode === 'online') || grid[0][c] !== null}
             onClick={() => handleColClick(c)}
-            className="w-full py-1.5 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 border-[var(--arcade-ink)] rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
+            className="w-full py-2 sm:py-2 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 border-[var(--arcade-ink)] rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
             aria-label={`Drop disc in column ${c + 1}`}
           >
-            <GoogleIcon name="arrow_downward" size={16} />
+            <GoogleIcon name="arrow_downward" size={18} />
           </button>
         ))}
       </div>
 
-      {/* 6x7 Arcade Board */}
+      {/* 6x7 Arcade Board - Covers Most Screen Width on Phone */}
       <div
-        className={`p-3 bg-[#2455d6] border-[4px] border-[var(--arcade-ink)] rounded-3xl shadow-[6px_6px_0_var(--arcade-ink)] w-full max-w-[380px] ${
+        className={`p-1.5 sm:p-3 bg-[#2455d6] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full max-w-[min(98vw,480px)] ${
           shaking ? 'arcade-shake' : ''
         }`}
       >
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
           {grid.map((row, r) =>
             row.map((cell, c) => {
               const winning = isCellWinning(r, c);
