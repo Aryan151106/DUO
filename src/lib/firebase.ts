@@ -99,6 +99,10 @@ export async function signInWithEmail(email: string, password: string) {
 }
 
 export async function signOut() {
+  try {
+    const { logoutOneSignal } = await import('./oneSignal');
+    await logoutOneSignal();
+  } catch {}
   return firebaseSignOut(auth);
 }
 

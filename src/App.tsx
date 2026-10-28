@@ -142,6 +142,7 @@ function AppInner() {
           setCoupleInfo(null);
         }
       } else {
+        import('./lib/oneSignal').then(({ logoutOneSignal }) => logoutOneSignal().catch(() => {}));
         if (!isDemoMode) {
           setCouple(null);
           setCoupleInfo(null);

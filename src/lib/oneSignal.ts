@@ -1,52 +1,66 @@
 import OneSignal from 'react-onesignal';
-import { auth, db } from './firebase';
+import { auth } from './firebase';
 import { useAuthStore } from './store';
 import { getSocketServerUrl } from './socketConfig';
 
 let initPromise: Promise<boolean> | null = null;
 let isInitialized = false;
+let initError: string | null = null;
 
 export interface OneSignalConfig {
   appId: string;
-  restApiKey?: string;
 }
 
 export interface SendPushResult {
-  success: boolean;
+  provider: 'onesignal';
   requestAccepted: boolean;
   notificationId?: string | null;
-  recipients?: number;
-  reason?: string;
-  correlationId?: string;
+  recipients: number;
+  reason: string;
+  correlationId: string;
 }
 
-export function getOneSignalConfig(): OneSignalConfig {
-  const envAppId = (import.meta.env.VITE_ONESIGNAL_APP_ID || '').trim();
-  const envApiKey = (import.meta.env.VITE_ONESIGNAL_REST_API_KEY || '').trim();
-  const localApiKey =
-    typeof window !== 'undefined' ? (localStorage.getItem('duo_onesignal_api_key') || '').trim() : '';
-
-  // Authoritative production App ID synchronized between client and backend
-  const appId = envAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb';
-  const restApiKey = envApiKey || localApiKey || '';
-
-  return { appId, restApiKey };
-}
-
-export function saveOneSignalConfig(_appId?: string, apiKey?: string) {
-  if (typeof window !== 'undefined' && apiKey !== undefined) {
-    const clean = apiKey.trim();
-    if (clean) {
-      localStorage.setItem('duo_onesignal_api_key', clean);
-    } else {
-      localStorage.removeItem('duo_onesignal_api_key');
-    }
-  }
+export interface SubscriptionDiagnosticState {
+  isSupported: boolean;
+  permission: NotificationPermission | 'unsupported';
+  isInitialized: boolean;
+  initError: string | null;
+  isOptedIn: boolean;
+  subscriptionId: string | null;
+  externalId: string | null;
+  isLinkedToUser: boolean;
+  isIos: boolean;
+  isStandalone: boolean;
 }
 
 /**
- * Initialize OneSignal authoritatively and bind current user's Firebase UID as external_id.
- * Configured with serviceWorkerPath: 'sw.js' to unify PWA caching and OneSignal push into one worker.
+ * Returns the configured OneSignal App ID.
+ * REST credentials NEVER touch the client; they are kept strictly on the Node.js server.
+ */
+export function getOneSignalConfig(): OneSignalConfig {
+  const envAppId = (import.meta.env.VITE_ONESIGNAL_APP_ID || '').trim();
+  const appId = envAppId || 'e0bb43d0-355d-48de-bb9f-0caf33039abb';
+  return { appId };
+}
+
+/**
+ * Platform detection for iOS and standalone PWA mode.
+ */
+export function getPlatformState(): { isIos: boolean; isStandalone: boolean } {
+  if (typeof window === 'undefined') return { isIos: false, isStandalone: false };
+
+  const ua = window.navigator.userAgent.toLowerCase();
+  const isIos = /iphone|ipad|ipod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true;
+
+  return { isIos, isStandalone };
+}
+
+/**
+ * Single authoritative initialization promise for OneSignal Web SDK v16.
+ * Attaches to unified root service worker at /sw.js with scope /.
  */
 export async function initOneSignal(userId?: string): Promise<boolean> {
   const { appId } = getOneSignalConfig();
@@ -65,12 +79,12 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
   }
 
   if (initPromise) {
-    if (userId) {
-      void initPromise.then((ok) => {
-        if (ok) void bindOneSignalUser(userId);
-      });
-    }
-    return initPromise;
+    return initPromise.then(async (ok) => {
+      if (ok && userId) {
+        await bindOneSignalUser(userId);
+      }
+      return ok;
+    });
   }
 
   initPromise = (async () => {
@@ -86,20 +100,23 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
           notifyButton: { enable: false } as any,
         });
         isInitialized = true;
+        initError = null;
       } catch (err: any) {
         const errMsg = err?.message || String(err);
         if (errMsg.toLowerCase().includes('already initialized') || win.OneSignal?.initialized) {
           console.info('[OneSignal] OneSignal SDK already initialized.');
           isInitialized = true;
+          initError = null;
         } else {
           console.warn('[OneSignal] OneSignal.init() notice:', err);
           isInitialized = false;
-          initPromise = null; // Allow subsequent retry
+          initError = errMsg;
+          initPromise = null;
           return false;
         }
       }
 
-      // Register notification click listener for deep linking to screens
+      // Deep link navigation on notification click
       try {
         const notifApi = win.OneSignal?.Notifications || (OneSignal as any).Notifications;
         if (notifApi?.addEventListener) {
@@ -112,7 +129,7 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
           });
         }
       } catch (e) {
-        console.warn('[OneSignal] Notification click listener notice:', e);
+        console.warn('[OneSignal] Click listener notice:', e);
       }
 
       if (userId) {
@@ -120,9 +137,10 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
       }
 
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[OneSignal] Initialization error:', error);
       isInitialized = false;
+      initError = error?.message || String(error);
       initPromise = null;
       return false;
     }
@@ -131,59 +149,68 @@ export async function initOneSignal(userId?: string): Promise<boolean> {
   return initPromise;
 }
 
-export async function bindOneSignalUser(userId: string) {
+/**
+ * Links current browser's OneSignal push subscription to the signed-in Firebase UID.
+ */
+export async function bindOneSignalUser(userId: string): Promise<boolean> {
   try {
-    const win = window as any;
-    const sdk = win.OneSignal || OneSignal;
+    if (!userId) return false;
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    const sdk = win?.OneSignal || OneSignal;
 
     if (sdk.login) {
       await sdk.login(userId);
     }
-    console.log('[OneSignal] User subscription linked to UID:', userId);
+    console.info('[OneSignal] Subscription linked to UID:', userId);
 
-    // If browser permission is already granted, ensure push subscription opt-in
+    // If permission is already granted, verify push subscription opt-in
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       const sub = sdk.User?.PushSubscription;
       if (sub && !sub.optedIn && sub.optIn) {
         await sub.optIn();
       }
     }
+    return true;
   } catch (e) {
-    console.warn('[OneSignal] User push subscription setup notice:', e);
+    console.warn('[OneSignal] User linking notice:', e);
+    return false;
   }
 }
 
 /**
- * Check if the current client is opted in and subscribed to OneSignal Web Push.
- * Verifies OneSignal's actual PushSubscription state.
+ * Clears the external_id link on logout to prevent misdirected push notifications.
  */
-export function isOneSignalSubscribed(): boolean {
-  if (typeof window === 'undefined') return false;
-  const win = window as any;
-  const sdk = win.OneSignal || OneSignal;
-  const sub = sdk.User?.PushSubscription;
-  return Boolean(sub?.optedIn && sub?.id);
+export async function logoutOneSignal(): Promise<void> {
+  try {
+    const win = typeof window !== 'undefined' ? (window as any) : null;
+    const sdk = win?.OneSignal || OneSignal;
+    if (sdk?.logout) {
+      await sdk.logout();
+      console.info('[OneSignal] Logged out external_id');
+    }
+  } catch (e) {
+    console.warn('[OneSignal] Logout notice:', e);
+  }
 }
 
 /**
  * Returns full diagnostic state of the local OneSignal subscription.
  */
-export function getOneSignalSubscriptionState(): {
-  isSupported: boolean;
-  permission: NotificationPermission | 'unsupported';
-  isInitialized: boolean;
-  isOptedIn: boolean;
-  subscriptionId: string | null;
-  externalId: string | null;
-} {
+export function getOneSignalSubscriptionState(currentUserId?: string): SubscriptionDiagnosticState {
+  const { isIos, isStandalone } = getPlatformState();
+
   if (typeof window === 'undefined') {
     return {
       isSupported: false,
       permission: 'unsupported',
       isInitialized: false,
+      initError: null,
       isOptedIn: false,
       subscriptionId: null,
       externalId: null,
+      isLinkedToUser: false,
+      isIos,
+      isStandalone,
     };
   }
 
@@ -191,78 +218,157 @@ export function getOneSignalSubscriptionState(): {
   const sdk = win.OneSignal || OneSignal;
   const sub = sdk.User?.PushSubscription;
   const perm = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported';
+  const extId = sdk.User?.externalId || null;
+
+  const isSupported =
+    typeof Notification !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window &&
+    (!isIos || isStandalone);
 
   return {
-    isSupported: typeof Notification !== 'undefined' && 'serviceWorker' in navigator,
+    isSupported,
     permission: perm,
     isInitialized,
+    initError,
     isOptedIn: Boolean(sub?.optedIn),
     subscriptionId: sub?.id || null,
-    externalId: sdk.User?.externalId || null,
+    externalId: extId,
+    isLinkedToUser: Boolean(currentUserId && extId && extId === currentUserId),
+    isIos,
+    isStandalone,
   };
 }
 
 /**
- * Request push notification permission via OneSignal SDK tied to a user gesture.
- * Crucially invokes OneSignal.Notifications.requestPermission() so OneSignal registers
- * the browser's pushManager token and generates the subscriber record on OneSignal's backend.
+ * Explicit user-action flow to request permission, opt-in to Web Push, and link account.
  */
-export async function requestOneSignalPermission(userId?: string): Promise<boolean> {
-  if (typeof window === 'undefined') return false;
-
-  const { appId } = getOneSignalConfig();
-  if (!appId) {
-    if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission().catch(() => {});
-    }
-    return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+export async function subscribeDevice(userId?: string): Promise<{
+  success: boolean;
+  permission: NotificationPermission | 'unsupported';
+  isOptedIn: boolean;
+  subscriptionId: string | null;
+  externalId: string | null;
+  reason: string;
+}> {
+  if (typeof window === 'undefined') {
+    return {
+      success: false,
+      permission: 'unsupported',
+      isOptedIn: false,
+      subscriptionId: null,
+      externalId: null,
+      reason: 'window_undefined',
+    };
   }
 
-  if (!isInitialized) {
-    await initOneSignal(userId);
+  const { isIos, isStandalone } = getPlatformState();
+  if (isIos && !isStandalone) {
+    return {
+      success: false,
+      permission: 'unsupported',
+      isOptedIn: false,
+      subscriptionId: null,
+      externalId: null,
+      reason: 'ios_pwa_required',
+    };
   }
+
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    return {
+      success: false,
+      permission: 'unsupported',
+      isOptedIn: false,
+      subscriptionId: null,
+      externalId: null,
+      reason: 'unsupported_browser',
+    };
+  }
+
+  // Ensure OneSignal SDK is initialized
+  await initOneSignal(userId);
 
   const win = window as any;
   const sdk = win.OneSignal || OneSignal;
 
   try {
-    // 1. Explicitly invoke OneSignal SDK's requestPermission to run the full push registration lifecycle
-    if (sdk.Notifications?.requestPermission) {
-      await sdk.Notifications.requestPermission();
-    } else if ('Notification' in window && Notification.permission === 'default') {
-      await Notification.requestPermission();
+    // 1. If permission is default, invoke OneSignal's permission request
+    if (Notification.permission === 'default') {
+      if (sdk.Notifications?.requestPermission) {
+        await sdk.Notifications.requestPermission();
+      } else {
+        await Notification.requestPermission();
+      }
     }
 
-    const isGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
-
-    // 2. Opt-in push subscription
-    if (isGranted) {
-      const sub = sdk.User?.PushSubscription;
-      if (sub?.optIn) {
-        await sub.optIn();
-      }
-
-      // 3. Link UID as OneSignal external_id
-      if (userId) {
-        if (sdk.login) {
-          await sdk.login(userId);
-        }
-      }
-
-      console.log(`[OneSignal] Registration complete. OptedIn: ${sub?.optedIn}, SubId: ${sub?.id || 'pending'}`);
+    const currentPerm = Notification.permission;
+    if (currentPerm !== 'granted') {
+      return {
+        success: false,
+        permission: currentPerm,
+        isOptedIn: false,
+        subscriptionId: null,
+        externalId: null,
+        reason: 'permission_denied',
+      };
     }
 
-    return isGranted;
-  } catch (err) {
-    console.warn('[OneSignal] Permission request failed:', err);
-    return typeof Notification !== 'undefined' && Notification.permission === 'granted';
+    // 2. Explicitly opt in to Push Subscription
+    const sub = sdk.User?.PushSubscription;
+    if (sub?.optIn && !sub.optedIn) {
+      await sub.optIn();
+    }
+
+    // 3. Link UID as OneSignal external_id
+    if (userId && sdk.login) {
+      await sdk.login(userId);
+    }
+
+    // 4. Wait briefly for OneSignal to issue subscription ID
+    let subId = sdk.User?.PushSubscription?.id || null;
+    if (!subId) {
+      for (let i = 0; i < 8; i++) {
+        await new Promise((r) => setTimeout(r, 350));
+        subId = sdk.User?.PushSubscription?.id || null;
+        if (subId) break;
+      }
+    }
+
+    const optedIn = Boolean(sdk.User?.PushSubscription?.optedIn);
+    const extId = sdk.User?.externalId || null;
+
+    return {
+      success: Boolean(subId),
+      permission: currentPerm,
+      isOptedIn: optedIn,
+      subscriptionId: subId,
+      externalId: extId,
+      reason: subId ? 'subscribed' : 'subscription_id_pending',
+    };
+  } catch (err: any) {
+    console.warn('[OneSignal] Subscription registration notice:', err);
+    return {
+      success: false,
+      permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
+      isOptedIn: false,
+      subscriptionId: null,
+      externalId: null,
+      reason: err?.message || 'subscription_error',
+    };
   }
 }
 
 /**
- * Dispatch an OS-level Push Notification directly to partner's device via OneSignal.
- * Strictly uses ONLY OneSignal via our backend server (/api/push/send on Render).
- * Absolutely NO Cloud Functions are used.
+ * Backward compatibility alias for subscribeDevice
+ */
+export async function requestOneSignalPermission(userId?: string): Promise<boolean> {
+  const result = await subscribeDevice(userId);
+  return result.success || result.permission === 'granted';
+}
+
+/**
+ * Dispatches an OS Push Notification strictly through our authenticated Node.js backend.
+ * Never claims delivery unless OneSignal confirmed accepting it.
  */
 export async function sendOneSignalPush(params: {
   coupleId?: string;
@@ -280,122 +386,108 @@ export async function sendOneSignalPush(params: {
 
   if (!targetUserId) {
     return {
+      provider: 'onesignal',
       success: false,
       requestAccepted: false,
+      recipients: 0,
       reason: 'missing_target_user_id',
       correlationId,
-    };
+    } as any;
   }
 
   if (!coupleId) {
-    console.warn('[OneSignal] Cannot dispatch push: coupleId is not available.');
     return {
+      provider: 'onesignal',
       success: false,
       requestAccepted: false,
+      recipients: 0,
       reason: 'missing_couple_id',
       correlationId,
-    };
+    } as any;
   }
 
-  const { restApiKey, appId } = getOneSignalConfig();
-
-  // 1. Dispatch through our Node.js backend server endpoint on Render
-  // The server calls OneSignal REST API without CORS restrictions
-  try {
-    const socketUrl = getSocketServerUrl();
-
-    if (socketUrl && auth.currentUser) {
-      const idToken = await auth.currentUser.getIdToken();
-      const res = await fetch(`${socketUrl}/api/push/send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({
-          coupleId,
-          targetUserId,
-          title,
-          body,
-          type: type || 'message',
-          deepLink: deepLink || '/',
-          metadata,
-          eventId,
-          apiKey: restApiKey || undefined,
-          appId,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (data.requestAccepted || data.success) {
-          const recipients = typeof data.recipients === 'number' ? data.recipients : 1;
-          const isDeliveredToDevice = recipients > 0;
-          return {
-            success: true,
-            requestAccepted: true,
-            notificationId: data.notificationId || null,
-            recipients,
-            reason: isDeliveredToDevice
-              ? 'onesignal_delivered'
-              : data.reason === 'no_push_key'
-              ? 'no_push_key'
-              : 'partner_not_subscribed',
-            correlationId,
-          };
-        }
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        console.warn('[OneSignal] Server returned error:', res.status, errData);
-      }
-    }
-  } catch (socketErr: any) {
-    console.info('[OneSignal] Socket server push notice:', socketErr?.message || socketErr);
-  }
-
-  // 2. Realtime fallback: record notification in Firestore
-  // Active partner app in background tab or foreground immediately displays the alert and plays audio
-  try {
-    if (!auth.currentUser) {
-      return {
-        success: true,
-        requestAccepted: true,
-        recipients: 1,
-        reason: 'demo_synced',
-        correlationId,
-      };
-    }
-
-    const currentUserId = auth.currentUser.uid;
-    const currentName = useAuthStore.getState().currentUser?.displayName || 'Partner';
-    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
-
-    await addDoc(collection(db, 'couples', coupleId, 'notifications'), {
-      title,
-      body,
-      type: type || 'message',
-      senderId: currentUserId,
-      senderName: currentName,
-      deepLink: deepLink || '/',
-      read: false,
-      createdAt: serverTimestamp(),
-      metadata: { recipientId: targetUserId, ...(metadata || {}) },
-    });
-
+  const socketUrl = getSocketServerUrl();
+  if (!socketUrl) {
     return {
-      success: true,
-      requestAccepted: true,
-      recipients: 1,
-      reason: 'realtime_synced',
-      correlationId,
-    };
-  } catch (dbErr: any) {
-    console.error('[OneSignal] Push fallback error:', dbErr?.message || dbErr);
-    return {
+      provider: 'onesignal',
       success: false,
       requestAccepted: false,
-      reason: dbErr?.message || 'push_dispatch_failed',
+      recipients: 0,
+      reason: 'push_server_unavailable',
       correlationId,
-    };
+    } as any;
+  }
+
+  if (!auth.currentUser) {
+    return {
+      provider: 'onesignal',
+      success: false,
+      requestAccepted: false,
+      recipients: 0,
+      reason: 'user_not_authenticated',
+      correlationId,
+    } as any;
+  }
+
+  try {
+    const idToken = await auth.currentUser.getIdToken();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
+
+    const res = await fetch(`${socketUrl}/api/push/send`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${idToken}`,
+        'X-Correlation-ID': correlationId,
+      },
+      body: JSON.stringify({
+        coupleId,
+        targetUserId,
+        title,
+        body,
+        type: type || 'message',
+        deepLink: deepLink || '/',
+        metadata,
+        eventId,
+        correlationId,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+      const recipients = typeof data.recipients === 'number' ? data.recipients : 0;
+      return {
+        provider: 'onesignal',
+        success: data.requestAccepted === true,
+        requestAccepted: Boolean(data.requestAccepted),
+        notificationId: data.notificationId || null,
+        recipients,
+        reason: data.reason || (recipients > 0 ? 'accepted' : 'zero_recipients'),
+        correlationId,
+      } as any;
+    } else {
+      return {
+        provider: 'onesignal',
+        success: false,
+        requestAccepted: false,
+        recipients: 0,
+        reason: data.error || data.reason || `http_${res.status}`,
+        correlationId,
+      } as any;
+    }
+  } catch (err: any) {
+    const isTimeout = err?.name === 'AbortError';
+    return {
+      provider: 'onesignal',
+      success: false,
+      requestAccepted: false,
+      recipients: 0,
+      reason: isTimeout ? 'network_timeout' : (err?.message || 'push_request_failed'),
+      correlationId,
+    } as any;
   }
 }

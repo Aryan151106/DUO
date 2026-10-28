@@ -11,16 +11,14 @@ import { ThemeChooser } from './ThemeChooser';
 import { updateProfile } from '../../lib/firestore';
 import { SoundChooserModal } from './SoundChooserModal';
 import { InstallAppModal } from '../../components/InstallAppModal';
-import { db } from '../../lib/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
 import { useNotificationStore } from '../../lib/notifications';
 import {
   getOneSignalConfig,
-  saveOneSignalConfig,
   sendOneSignalPush,
-  requestOneSignalPermission,
   getOneSignalSubscriptionState,
+  subscribeDevice,
 } from '../../lib/oneSignal';
+import { getSocketServerUrl } from '../../lib/socketConfig';
 import {
   Bell,
   Download,
@@ -162,57 +160,82 @@ export const SettingsModal: React.FC = () => {
   // OneSignal & Push Test state
   const [deviceTesting, setDeviceTesting] = useState(false);
   const [deviceTestResult, setDeviceTestResult] = useState<string | null>(null);
-  const [oneSignalTesting, setOneSignalTesting] = useState(false);
-  const [oneSignalTestResult, setOneSignalTestResult] = useState<string | null>(null);
+
+  const [serverPushTesting, setServerPushTesting] = useState(false);
+  const [serverPushResult, setServerPushResult] = useState<{
+    status: 'success' | 'warning' | 'error';
+    summary: string;
+    recipients?: number;
+    notificationId?: string | null;
+    reason?: string;
+  } | null>(null);
+
+  const [partnerTesting, setPartnerTesting] = useState(false);
+  const [partnerTestResult, setPartnerTestResult] = useState<{
+    status: 'success' | 'warning' | 'error';
+    summary: string;
+    recipients?: number;
+    notificationId?: string | null;
+    reason?: string;
+  } | null>(null);
+
   const [notifFeedback, setNotifFeedback] = useState<string | null>(null);
   const [subscribingPhone, setSubscribingPhone] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(() => getOneSignalConfig().restApiKey || '');
-  const [apiKeySaved, setApiKeySaved] = useState(false);
-  const [osState, setOsState] = useState(() => getOneSignalSubscriptionState());
+  const [subscribeFeedback, setSubscribeFeedback] = useState<string | null>(null);
+  const [osState, setOsState] = useState(() => getOneSignalSubscriptionState(currentUser?.id));
+  const [swStatus, setSwStatus] = useState<{ registered: boolean; active: boolean; scope?: string }>({
+    registered: false,
+    active: false,
+  });
 
   const refreshOsState = () => {
-    setOsState(getOneSignalSubscriptionState());
+    setOsState(getOneSignalSubscriptionState(currentUser?.id));
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        setSwStatus({
+          registered: Boolean(reg),
+          active: Boolean(reg?.active),
+          scope: reg?.scope,
+        });
+      }).catch(() => {});
+    }
   };
 
   useEffect(() => {
     refreshOsState();
-    const timer = setInterval(refreshOsState, 3500);
+    const timer = setInterval(refreshOsState, 3000);
     return () => clearInterval(timer);
-  }, []);
+  }, [currentUser?.id]);
 
   const handleSubscribePhone = async () => {
     setSubscribingPhone(true);
-    setDeviceTestResult(null);
+    setSubscribeFeedback(null);
     try {
-      const ok = await requestOneSignalPermission(currentUser?.id);
+      const res = await subscribeDevice(currentUser?.id);
       refreshOsState();
-      if (ok) {
+
+      if (res.success) {
         soundEngine.play('notification', { force: true });
-        setDeviceTestResult('✓ This phone is successfully registered with OneSignal push notifications!');
+        setSubscribeFeedback(
+          `✓ Subscribed! Subscription ID: ${res.subscriptionId ? res.subscriptionId.slice(0, 10) + '...' : 'Active'}. Linked to UID: ${res.externalId || currentUser?.id}`
+        );
       } else {
-        setDeviceTestResult('⚠️ Notification permission was not granted. Please allow notifications in browser/phone settings.');
+        if (res.reason === 'ios_pwa_required') {
+          setSubscribeFeedback(
+            '⚠️ iOS Web Push requires iOS 16.4+ and DUO added to your Home Screen from Safari (Tap Share → "Add to Home Screen"). Open DUO from your Home Screen to subscribe.'
+          );
+        } else if (res.permission === 'denied') {
+          setSubscribeFeedback(
+            '⚠️ Notifications are blocked in browser settings. Please click the permissions icon in your address bar and reset Notifications to "Allow".'
+          );
+        } else {
+          setSubscribeFeedback(`⚠️ Could not complete subscription: ${res.reason}`);
+        }
       }
     } catch (e: any) {
-      setDeviceTestResult(`Subscription notice: ${e?.message || 'Could not complete subscription'}`);
+      setSubscribeFeedback(`Subscription notice: ${e?.message || 'Could not complete subscription'}`);
     } finally {
       setSubscribingPhone(false);
-    }
-  };
-
-  const handleSaveApiKey = async () => {
-    const cleanKey = apiKeyInput.trim();
-    saveOneSignalConfig(getOneSignalConfig().appId, cleanKey);
-    setApiKeySaved(true);
-    setTimeout(() => setApiKeySaved(false), 3000);
-
-    if (couple?.id && db) {
-      try {
-        await updateDoc(doc(db, 'couples', couple.id), {
-          oneSignalApiKey: cleanKey,
-        });
-      } catch (err) {
-        console.warn('[Settings] Could not save API key to Firestore couple space:', err);
-      }
     }
   };
 
@@ -221,12 +244,9 @@ export const SettingsModal: React.FC = () => {
     setDeviceTestResult(null);
     try {
       if (typeof window === 'undefined' || !('Notification' in window)) {
-        setDeviceTestResult('Push notifications are not supported by this browser.');
+        setDeviceTestResult('Local notification API is not supported by this browser.');
         return;
       }
-
-      // Explicitly trigger OneSignal registration in parallel
-      void requestOneSignalPermission(currentUser?.id).catch(() => {});
 
       let perm = Notification.permission;
       if (perm === 'default') {
@@ -250,8 +270,8 @@ export const SettingsModal: React.FC = () => {
         try {
           const reg = await navigator.serviceWorker.ready;
           if (reg && reg.showNotification) {
-            await reg.showNotification('🔔 AV Duo Device Alert', {
-              body: 'Push alerts and sounds are working properly on this device! ✨',
+            await reg.showNotification('🔔 DUO Local Phone Test', {
+              body: 'Local notification display & sound engine are working! ✨ (Client-side test; does not prove background push)',
               icon: '/pwa-192x192.png',
               badge: '/logo.svg',
               tag: 'duo-device-test',
@@ -266,14 +286,14 @@ export const SettingsModal: React.FC = () => {
       }
 
       if (!swSuccess) {
-        new Notification('🔔 AV Duo Device Alert', {
-          body: 'Push alerts and sounds are working properly on this device! ✨',
+        new Notification('🔔 DUO Local Phone Test', {
+          body: 'Local notification display & sound engine are working! ✨ (Client-side test; does not prove background push)',
           icon: '/pwa-192x192.png',
         });
       }
 
       refreshOsState();
-      setDeviceTestResult('✓ Notification delivered to your phone! Check your notification bar.');
+      setDeviceTestResult('✓ Local notification displayed. (Note: Client-side test only; this does not prove the phone receives push when the app is closed).');
     } catch (err: any) {
       setDeviceTestResult(`Device test error: ${err?.message || 'Could not display alert'}`);
     } finally {
@@ -281,13 +301,70 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
+  const handleSendPushTest = async () => {
+    setServerPushTesting(true);
+    setServerPushResult(null);
+    try {
+      if (!currentUser?.id) {
+        setServerPushResult({
+          status: 'error',
+          summary: 'You must be signed in to test push delivery to your account.',
+        });
+        return;
+      }
+
+      const res = await sendOneSignalPush({
+        coupleId: couple?.id,
+        targetUserId: currentUser.id,
+        title: 'AV Duo Push Test 🔔',
+        body: 'Server-dispatched push notification to your phone! (Close app to test background wakeup)',
+        type: 'message',
+      });
+
+      if (res.requestAccepted && res.recipients > 0) {
+        setServerPushResult({
+          status: 'success',
+          summary: `✓ OneSignal accepted request for ${res.recipients} registered device(s)!`,
+          recipients: res.recipients,
+          notificationId: res.notificationId,
+          reason: res.reason,
+        });
+      } else if (res.requestAccepted && res.recipients === 0) {
+        setServerPushResult({
+          status: 'warning',
+          summary: `⚠️ OneSignal accepted request, but reported 0 active recipients for your account (${currentUser.id}). Tap "Subscribe Phone" above to link this device.`,
+          recipients: 0,
+          notificationId: res.notificationId,
+          reason: res.reason,
+        });
+      } else {
+        setServerPushResult({
+          status: 'error',
+          summary: `❌ Push request failed: ${res.reason || 'Server error'}`,
+          recipients: res.recipients,
+          reason: res.reason,
+        });
+      }
+    } catch (err: any) {
+      setServerPushResult({
+        status: 'error',
+        summary: `Could not send push test: ${err?.message || 'Network error'}`,
+      });
+    } finally {
+      setServerPushTesting(false);
+    }
+  };
+
   const handleTestPartnerAlert = async () => {
-    setOneSignalTesting(true);
-    setOneSignalTestResult(null);
+    setPartnerTesting(true);
+    setPartnerTestResult(null);
     try {
       const targetId = partnerUser?.id;
       if (!targetId) {
-        setOneSignalTestResult('Partner not connected yet');
+        setPartnerTestResult({
+          status: 'warning',
+          summary: 'Partner not connected yet to this couple space.',
+        });
         return;
       }
 
@@ -298,31 +375,41 @@ export const SettingsModal: React.FC = () => {
         coupleId: couple?.id,
         targetUserId: targetId,
         title: 'AV Duo Test Alert 💌',
-        body: `${senderName} sent you a test background alert!`,
+        body: `${senderName} sent you a test push alert!`,
         type: 'message',
       });
 
-      if (res.requestAccepted || res.success) {
-        if (res.reason === 'onesignal_delivered' || (res.recipients && res.recipients > 0)) {
-          setOneSignalTestResult(`✓ Push alert sent to ${partnerName}'s phone via OneSignal!`);
-        } else if (res.reason === 'partner_not_subscribed' || res.recipients === 0) {
-          setOneSignalTestResult(`⚠️ Sent to OneSignal, but ${partnerName}'s device is not subscribed yet. ${partnerName} must open the app and tap "Enable Notifications".`);
-        } else if (res.reason === 'no_push_key') {
-          setOneSignalTestResult(`⚠️ OneSignal REST API Key missing. Enter your key in Push Diagnostics below.`);
-        } else if (res.reason === 'realtime_synced') {
-          setOneSignalTestResult(`✓ Real-time alert dispatched to ${partnerName}!`);
-        } else if (res.reason === 'demo_synced') {
-          setOneSignalTestResult(`✓ Demo alert simulated for ${partnerName}!`);
-        } else {
-          setOneSignalTestResult(`✓ Alert dispatched to ${partnerName} successfully!`);
-        }
+      if (res.requestAccepted && res.recipients > 0) {
+        setPartnerTestResult({
+          status: 'success',
+          summary: `✓ OneSignal accepted request for ${res.recipients} device(s) belonging to ${partnerName}!`,
+          recipients: res.recipients,
+          notificationId: res.notificationId,
+          reason: res.reason,
+        });
+      } else if (res.requestAccepted && res.recipients === 0) {
+        setPartnerTestResult({
+          status: 'warning',
+          summary: `⚠️ OneSignal accepted request, but reported 0 devices for ${partnerName}. ${partnerName} must open DUO on their phone and tap "Subscribe Phone".`,
+          recipients: 0,
+          notificationId: res.notificationId,
+          reason: res.reason,
+        });
       } else {
-        setOneSignalTestResult(`Push status: ${res.reason || 'Partner may need to open the app once to link'}`);
+        setPartnerTestResult({
+          status: 'error',
+          summary: `❌ Push request failed: ${res.reason || 'Server error'}`,
+          recipients: res.recipients,
+          reason: res.reason,
+        });
       }
     } catch (err: any) {
-      setOneSignalTestResult(`Could not dispatch: ${err?.message || 'Connection error'}`);
+      setPartnerTestResult({
+        status: 'error',
+        summary: `Could not dispatch: ${err?.message || 'Connection error'}`,
+      });
     } finally {
-      setOneSignalTesting(false);
+      setPartnerTesting(false);
     }
   };
 
@@ -875,7 +962,7 @@ export const SettingsModal: React.FC = () => {
         </div>
 
         {/* ONESIGNAL FREE BACKGROUND PUSH (100% ONE SIGNAL / NO CLOUD FUNCTIONS) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[var(--surface)] border-2 border-[var(--border)] shadow-xs space-y-3">
+        <div className="p-4 sm:p-5 rounded-2xl bg-[var(--surface)] border-2 border-[var(--border)] shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b-2 border-[var(--border)]">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -885,154 +972,276 @@ export const SettingsModal: React.FC = () => {
             </div>
             <span
               className={`text-[11px] font-ui font-bold px-2.5 py-0.5 rounded-full border shrink-0 whitespace-nowrap self-start sm:self-center ${
-                osState.isOptedIn && osState.subscriptionId
+                osState.isOptedIn && osState.subscriptionId && osState.isLinkedToUser
                   ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
+                  : osState.permission === 'denied'
+                  ? 'bg-red-500/15 text-red-600 border-red-500/30'
+                  : osState.isIos && !osState.isStandalone
+                  ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
                   : 'bg-amber-500/15 text-amber-600 border-amber-500/30'
               }`}
             >
-              {osState.isOptedIn && osState.subscriptionId ? 'Phone Subscribed ✓' : 'Tap to Subscribe 🔔'}
+              {osState.isOptedIn && osState.subscriptionId && osState.isLinkedToUser
+                ? 'Subscribed & Linked ✓'
+                : osState.permission === 'denied'
+                ? 'Permission Blocked ⚠️'
+                : osState.isIos && !osState.isStandalone
+                ? 'iOS Home Screen Required'
+                : 'Tap to Subscribe 🔔'}
             </span>
           </div>
 
           <p className="font-clean text-xs text-[var(--text-muted)] leading-relaxed">
-            Calls, messages, and nudges wake up your phone even when the app is completely closed or locked. Powered via <strong>OneSignal Web Push</strong> without any Firebase Cloud Functions.
+            Incoming calls and messages wake up your phone even when the app is completely closed or locked. Push notifications are dispatched through the authenticated <strong>Node.js Server</strong> directly to <strong>OneSignal Web Push</strong>. No Firebase Cloud Functions are used.
           </p>
 
-          <div className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Push Engine:</span>
-              <span className="font-bold text-emerald-600 flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> OneSignal (Direct Dispatch)
+          {/* Quick status summary cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="block text-[10px] text-[var(--text-muted)] font-bold">Browser Permission</span>
+              <span className={`font-ui font-bold text-xs truncate block ${
+                osState.permission === 'granted' ? 'text-emerald-600' : osState.permission === 'denied' ? 'text-red-500' : 'text-amber-500'
+              }`}>
+                {osState.permission === 'granted' ? 'Granted ✓' : osState.permission === 'denied' ? 'Denied ✕' : 'Default / None'}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">This Device Status:</span>
-              <span className={`font-bold flex items-center gap-1 ${osState.isOptedIn && osState.subscriptionId ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {osState.isOptedIn && osState.subscriptionId ? 'Subscribed & Active' : 'Not Subscribed Yet'}
+            <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="block text-[10px] text-[var(--text-muted)] font-bold">Service Worker</span>
+              <span className={`font-ui font-bold text-xs truncate block ${
+                swStatus.active ? 'text-emerald-600' : 'text-amber-500'
+              }`}>
+                {swStatus.active ? 'Active (Root) ✓' : swStatus.registered ? 'Registering...' : 'Not Active'}
               </span>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Target Partner:</span>
-              <span className="font-bold text-[var(--text)]">
-                {partnerUser?.displayName || 'Partner'}
+            <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="block text-[10px] text-[var(--text-muted)] font-bold">Push Subscription</span>
+              <span className={`font-ui font-bold text-xs truncate block ${
+                osState.isOptedIn && osState.subscriptionId ? 'text-emerald-600' : 'text-amber-500'
+              }`}>
+                {osState.isOptedIn && osState.subscriptionId ? 'Opted In ✓' : 'Not Subscribed'}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="block text-[10px] text-[var(--text-muted)] font-bold">Account Link</span>
+              <span className={`font-ui font-bold text-xs truncate block ${
+                osState.isLinkedToUser ? 'text-emerald-600' : 'text-amber-500'
+              }`}>
+                {osState.isLinkedToUser ? 'UID Linked ✓' : 'Not Linked'}
               </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2">
+          {/* Action buttons */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             <button
               type="button"
               disabled={subscribingPhone}
               onClick={handleSubscribePhone}
-              className={`px-3 py-2.5 rounded-xl border-2 font-chunky text-xs font-bold transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] cursor-pointer disabled:opacity-50 ${
-                osState.isOptedIn && osState.subscriptionId
+              className={`p-3 rounded-xl border-2 font-chunky text-xs font-bold transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[46px] cursor-pointer disabled:opacity-50 ${
+                osState.isOptedIn && osState.subscriptionId && osState.isLinkedToUser
                   ? 'bg-[var(--surface-2)] text-[var(--text)] border-[var(--border)] hover:bg-[var(--surface)]'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
               }`}
             >
               <Smartphone className="w-4 h-4 shrink-0" />
-              <span>{subscribingPhone ? 'Subscribing...' : osState.isOptedIn && osState.subscriptionId ? 'SUBSCRIBED ✓' : 'SUBSCRIBE PHONE 📲'}</span>
+              <span>{subscribingPhone ? 'Subscribing...' : osState.isOptedIn && osState.subscriptionId && osState.isLinkedToUser ? 'RE-SYNC SUBSCRIPTION 📲' : 'SUBSCRIBE PHONE 📲'}</span>
             </button>
 
             <button
               type="button"
               disabled={deviceTesting}
               onClick={handleTestLocalDevice}
-              className="px-3 py-2.5 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] hover:text-white border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
+              className="p-3 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--surface)] border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[46px] disabled:opacity-50"
+              title="Tests local browser notification permissions, vibration, and audio playback on this phone right now."
             >
               <Bell className="w-4 h-4 shrink-0" />
-              <span>{deviceTesting ? 'Testing...' : 'TEST THIS PHONE 🔔'}</span>
+              <span>{deviceTesting ? 'Testing Local...' : 'TEST THIS PHONE (LOCAL) 🔔'}</span>
             </button>
 
             <button
               type="button"
-              disabled={oneSignalTesting}
-              onClick={handleTestPartnerAlert}
-              className="px-3 py-2.5 rounded-xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] font-chunky text-xs font-bold text-white cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[44px] disabled:opacity-50"
+              disabled={serverPushTesting}
+              onClick={handleSendPushTest}
+              className="p-3 rounded-xl bg-[var(--accent)] hover:opacity-90 border-2 border-[var(--border)] font-chunky text-xs font-bold text-white cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[46px] disabled:opacity-50"
+              title="Dispatches a remote push from the Node server to your account. Close DUO to test background wakeup!"
             >
               <Sparkles className="w-4 h-4 shrink-0" />
-              <span>{oneSignalTesting ? 'Alerting...' : 'ALERT PARTNER 💌'}</span>
+              <span>{serverPushTesting ? 'Sending Server Push...' : 'SEND PUSH TEST (SERVER) 🚀'}</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={partnerTesting}
+              onClick={handleTestPartnerAlert}
+              className="p-3 rounded-xl bg-[var(--surface-2)] hover:bg-[var(--accent)] hover:text-white border-2 border-[var(--border)] font-chunky text-xs font-bold text-[var(--text)] cursor-pointer transition-all shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 flex items-center justify-center gap-2 min-h-[46px] disabled:opacity-50"
+            >
+              <Smartphone className="w-4 h-4 shrink-0" />
+              <span>{partnerTesting ? 'Alerting Partner...' : `ALERT PARTNER (${partnerUser?.displayName || 'Partner'}) 💌`}</span>
             </button>
           </div>
 
+          {/* Feedback messages */}
+          {subscribeFeedback && (
+            <div
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
+                subscribeFeedback.startsWith('✓')
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+              }`}
+            >
+              {subscribeFeedback}
+            </div>
+          )}
+
           {deviceTestResult && (
             <div
-              className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
                 deviceTestResult.startsWith('✓')
                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                   : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
               }`}
             >
+              <span className="font-bold block mb-0.5">Local Device Audio & Notification Test:</span>
               {deviceTestResult}
             </div>
           )}
 
-          {oneSignalTestResult && (
+          {serverPushResult && (
             <div
-              className={`text-xs font-bold p-3 rounded-xl border leading-relaxed ${
-                oneSignalTestResult.startsWith('✓')
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
+                serverPushResult.status === 'success'
                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                  : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                  : serverPushResult.status === 'warning'
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                  : 'bg-red-500/10 text-red-600 border-red-500/30'
               }`}
             >
-              {oneSignalTestResult}
+              <span className="font-bold block mb-0.5">Server Push Test (To Your Phone):</span>
+              <p>{serverPushResult.summary}</p>
+              {serverPushResult.recipients !== undefined && (
+                <div className="mt-1 font-mono text-[11px] opacity-90">
+                  Confirmed OneSignal Recipients: <strong>{serverPushResult.recipients}</strong>
+                  {serverPushResult.notificationId && (
+                    <span className="block truncate">Notification ID: {serverPushResult.notificationId}</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Synchronized configuration info */}
-          <details className="text-[11px] text-[var(--text-muted)] pt-1">
+          {partnerTestResult && (
+            <div
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
+                partnerTestResult.status === 'success'
+                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                  : partnerTestResult.status === 'warning'
+                  ? 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                  : 'bg-red-500/10 text-red-600 border-red-500/30'
+              }`}
+            >
+              <span className="font-bold block mb-0.5">Partner Push Alert Test:</span>
+              <p>{partnerTestResult.summary}</p>
+              {partnerTestResult.recipients !== undefined && (
+                <div className="mt-1 font-mono text-[11px] opacity-90">
+                  Confirmed OneSignal Recipients: <strong>{partnerTestResult.recipients}</strong>
+                  {partnerTestResult.notificationId && (
+                    <span className="block truncate">Notification ID: {partnerTestResult.notificationId}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Synchronized configuration & diagnostics info */}
+          <details className="text-[11px] text-[var(--text-muted)] pt-1" open>
             <summary className="cursor-pointer hover:text-[var(--text)] font-semibold select-none">
-              Push Diagnostics & REST API Configuration
+              Push Diagnostics & Platform Specifications
             </summary>
-            <div className="mt-3 space-y-3 p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-              <div>
-                <label className="block mb-1 font-bold">Synchronized OneSignal App ID</label>
-                <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text-muted)] truncate select-all">
-                  {getOneSignalConfig().appId}
-                </div>
-              </div>
-
-              <div>
-                <label className="block mb-1 font-bold">OneSignal REST API Key (Optional Override)</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    placeholder="Enter OneSignal REST API key (e.g. os_v2_app_...)"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveApiKey}
-                    className="px-3 py-1.5 rounded-lg bg-[var(--accent)] text-white text-[11px] font-bold cursor-pointer hover:opacity-90 shrink-0"
-                  >
-                    Save Key
-                  </button>
-                </div>
-                {apiKeySaved && (
-                  <span className="text-[10px] text-emerald-600 font-bold block mt-1">
-                    ✓ API Key saved to couple space & local storage!
+            <div className="mt-3 space-y-3 p-3.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Browser Permission</span>
+                  <span className="font-mono font-bold text-[var(--text)] block mt-0.5">
+                    {osState.permission}
                   </span>
-                )}
-                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
-                  Obtain from OneSignal Dashboard → App Settings → Keys & IDs. Passed directly to push server.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10px]">
-                <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
-                  <span className="block text-[var(--text-muted)]">Phone Subscription ID:</span>
-                  <span className="font-mono font-bold text-[var(--text)] truncate block">
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Service Worker Controller</span>
+                  <span className="font-mono font-bold text-[var(--text)] block mt-0.5 truncate">
+                    {swStatus.active ? 'Active & Controlling (Scope: /)' : 'Not controlling page'}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">OneSignal Web SDK</span>
+                  <span className="font-mono font-bold text-[var(--text)] block mt-0.5">
+                    {osState.isInitialized ? 'Initialized ✓' : osState.initError ? `Failed: ${osState.initError}` : 'Initializing...'}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">OneSignal Opt-In State</span>
+                  <span className="font-mono font-bold text-[var(--text)] block mt-0.5">
+                    {osState.isOptedIn ? 'Opted In ✓' : 'Opted Out'}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Push Subscription ID</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block mt-0.5" title={osState.subscriptionId || ''}>
                     {osState.subscriptionId || 'None (tap "Subscribe Phone")'}
                   </span>
                 </div>
-                <div className="p-2 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
-                  <span className="block text-[var(--text-muted)]">My OneSignal ID:</span>
-                  <span className="font-mono font-bold text-[var(--text)] truncate block">
-                    {currentUser?.id || 'Not logged in'}
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Linked External ID (OneSignal Login)</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block mt-0.5" title={osState.externalId || ''}>
+                    {osState.externalId ? (
+                      osState.isLinkedToUser ? `${osState.externalId} (Matches UID ✓)` : `${osState.externalId} (Mismatch ⚠️)`
+                    ) : (
+                      'Not linked'
+                    )}
                   </span>
                 </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Signed-In Firebase UID</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block mt-0.5">
+                    {currentUser?.id || 'Not signed in'}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--surface)] border border-[var(--border)]">
+                  <span className="block text-[10px] text-[var(--text-muted)] uppercase font-bold">Push Server Endpoint</span>
+                  <span className="font-mono font-bold text-[var(--text)] truncate block mt-0.5" title={`${getSocketServerUrl()}/api/push/send`}>
+                    {getSocketServerUrl()}/api/push/send
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block mb-1 text-[10px] font-bold text-[var(--text-muted)] uppercase">OneSignal App ID (Client & Server Synchronized)</label>
+                <div className="w-full px-2.5 py-1.5 rounded-lg bg-[var(--surface)] border border-[var(--border)] font-mono text-[11px] text-[var(--text)] select-all">
+                  {getOneSignalConfig().appId}
+                </div>
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  REST API credentials are securely managed on the Node.js server via the <code className="font-mono bg-[var(--surface)] px-1 py-0.5 rounded">ONESIGNAL_REST_API_KEY</code> environment secret and are never exposed to the browser.
+                </p>
+              </div>
+
+              {/* Platform Guidance */}
+              <div className="p-3 rounded-lg bg-[var(--surface)] border border-[var(--border)] space-y-2 text-[11px]">
+                <span className="font-bold text-[var(--text)] flex items-center gap-1.5">
+                  <Smartphone className="w-3.5 h-3.5 text-blue-500" /> Platform & Phone Push Requirements
+                </span>
+                <ul className="list-disc pl-4 space-y-1 text-[var(--text-muted)] leading-relaxed">
+                  <li>
+                    <strong className="text-[var(--text)]">iPhone / iPad (iOS 16.4+):</strong> Safari tabs do not support Web Push. You must tap the Safari Share button → <span className="font-semibold text-[var(--text)]">"Add to Home Screen"</span>, open DUO from your Home Screen, and tap <span className="font-semibold text-[var(--text)]">"Subscribe Phone"</span>.
+                  </li>
+                  <li>
+                    <strong className="text-[var(--text)]">Android:</strong> Notifications work in Chrome, Edge, and installed PWA. If notifications do not show when DUO is closed, check Android Settings → Apps → DUO / Chrome → ensure Notifications are Allowed and Battery is set to Unrestricted (or Not Optimized).
+                  </li>
+                  <li>
+                    <strong className="text-[var(--text)]">Delivery Truth:</strong> Web Push cannot bypass Do Not Disturb, Focus modes, device power off, or lack of internet connectivity. OneSignal reporting a recipient confirms the push server accepted and queued the message for that subscription.
+                  </li>
+                  <li>
+                    <strong className="text-[var(--text)]">Stale Registration Recovery:</strong> If notifications stop arriving after an app update: 1. Clear browser site permissions for DUO. 2. Refresh or reinstall the PWA. 3. Tap "Subscribe Phone" to generate a fresh subscription.
+                  </li>
+                </ul>
               </div>
             </div>
           </details>

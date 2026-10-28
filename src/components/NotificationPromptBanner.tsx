@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../lib/store';
 import { useNotificationStore } from '../lib/notifications';
-import { requestOneSignalPermission } from '../lib/oneSignal';
 import { Bell, X, Sparkles } from 'lucide-react';
 
 export const NotificationPromptBanner: React.FC = () => {
@@ -22,8 +21,7 @@ export const NotificationPromptBanner: React.FC = () => {
   if (permission === 'granted' || permission === 'denied') return null;
 
   const handleEnable = async () => {
-    const success = await requestPermissionAndToken(currentUser.id);
-    await requestOneSignalPermission().catch(() => {});
+    const success = await requestPermissionAndToken(currentUser?.id || '');
     if (success) {
       setGrantedFeedback(true);
       setTimeout(() => setDismissed(true), 2500);

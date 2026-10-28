@@ -329,173 +329,252 @@ app.post('/api/livekit/create-room', async (req, res) => {
   }
 });
 
-// REST Endpoint: Dispatch Push Notification via OneSignal or Firestore sync
+// REST Endpoint: Dispatch Push Notification via OneSignal (Server-Only Secret Engine)
 app.post('/api/push/send', async (req, res) => {
+  const correlationId = req.headers['x-correlation-id'] || req.body?.correlationId || `c-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
   try {
     const user = await getAuthenticatedUser(req);
     const {
       coupleId: reqCoupleId,
       targetUserId,
-      title,
-      body,
-      type = 'message',
+      title: reqTitle,
+      body: reqBody,
+      type: reqType = 'message',
       deepLink = '/',
       metadata = {},
       eventId = null,
     } = req.body || {};
 
     const coupleId = reqCoupleId || user.coupleId;
-    if (!coupleId || !targetUserId || !title) {
-      return res.status(400).json({ error: 'Missing required parameters (coupleId, targetUserId, title).' });
+    if (!coupleId || !targetUserId || !reqTitle) {
+      return res.status(400).json({
+        provider: 'onesignal',
+        requestAccepted: false,
+        recipients: 0,
+        reason: 'missing_parameters',
+        error: 'Missing required parameters (coupleId, targetUserId, title).',
+        correlationId,
+      });
     }
 
-    const isMember = await verifyUserCoupleMembership(user.uid, coupleId);
-    if (!isMember) {
-      return res.status(403).json({ error: 'Forbidden: You are not authorized for this couple space.' });
+    // Validate that sender belongs to the couple space
+    const isSenderMember = await verifyUserCoupleMembership(user.uid, coupleId);
+    if (!isSenderMember) {
+      console.warn(`[Push] [${correlationId}] Sender ${user.uid} unauthorized for couple ${coupleId}`);
+      return res.status(403).json({
+        provider: 'onesignal',
+        requestAccepted: false,
+        recipients: 0,
+        reason: 'forbidden_sender',
+        error: 'Forbidden: You are not authorized for this couple space.',
+        correlationId,
+      });
     }
 
-    let oneSignalApiKey = (req.body?.apiKey || process.env.ONESIGNAL_REST_API_KEY || '').trim();
-    const oneSignalAppId = (req.body?.appId || process.env.ONESIGNAL_APP_ID || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
-
-    // If API key is not passed in body or env, check couple space document in Firestore
-    if (!oneSignalApiKey && db && coupleId) {
-      try {
-        const cSnap = await db.collection('couples').doc(coupleId).get();
-        if (cSnap.exists) {
-          const cData = cSnap.data() || {};
-          if (cData.oneSignalApiKey) {
-            oneSignalApiKey = String(cData.oneSignalApiKey).trim();
-          }
-        }
-      } catch (keyErr) {
-        console.warn('[Push] Firestore couple key lookup notice:', keyErr.message);
-      }
+    // Validate that target user ALSO belongs to the couple space
+    const isTargetMember = await verifyUserCoupleMembership(targetUserId, coupleId);
+    if (!isTargetMember) {
+      console.warn(`[Push] [${correlationId}] Target user ${targetUserId} unauthorized for couple ${coupleId}`);
+      return res.status(403).json({
+        provider: 'onesignal',
+        requestAccepted: false,
+        recipients: 0,
+        reason: 'forbidden_target',
+        error: 'Forbidden: Target recipient is not a member of this couple space.',
+        correlationId,
+      });
     }
+
+    // Validate notification type against whitelist
+    const ALLOWED_TYPES = [
+      'message',
+      'voice',
+      'attachment',
+      'reaction',
+      'doodle',
+      'call',
+      'task',
+      'task_reminder',
+      'calendar',
+      'quick_love',
+      'streak',
+      'nudge',
+      'test',
+    ];
+    const type = ALLOWED_TYPES.includes(reqType) ? reqType : 'message';
+
+    // Sanitize title and body
+    const title = String(reqTitle).trim().slice(0, 100);
+    const body = String(reqBody || '').trim().slice(0, 300);
+
+    // OneSignal Credentials STRICTLY from Server Environment Secrets
+    // Never accept API keys from request payload or database
+    const oneSignalApiKey = (process.env.ONESIGNAL_REST_API_KEY || '').trim();
+    const oneSignalAppId = (process.env.ONESIGNAL_APP_ID || process.env.VITE_ONESIGNAL_APP_ID || 'e0bb43d0-355d-48de-bb9f-0caf33039abb').trim();
+
+    if (!oneSignalApiKey) {
+      console.warn(`[Push] [${correlationId}] ONESIGNAL_REST_API_KEY is not configured on the server.`);
+      return res.status(200).json({
+        provider: 'onesignal',
+        requestAccepted: false,
+        notificationId: null,
+        recipients: 0,
+        reason: 'missing_server_key',
+        correlationId,
+      });
+    }
+
+    if (!oneSignalAppId) {
+      console.warn(`[Push] [${correlationId}] ONESIGNAL_APP_ID is not configured.`);
+      return res.status(200).json({
+        provider: 'onesignal',
+        requestAccepted: false,
+        notificationId: null,
+        recipients: 0,
+        reason: 'missing_app_id',
+        correlationId,
+      });
+    }
+
+    const authHeader = oneSignalApiKey.startsWith('Key ') || oneSignalApiKey.startsWith('Basic ')
+      ? oneSignalApiKey
+      : oneSignalApiKey.startsWith('os_v2_app_')
+      ? `Key ${oneSignalApiKey}`
+      : `Basic ${oneSignalApiKey}`;
+
+    const baseUrl = 'https://av-space-311906.web.app';
+    const notifUrl = deepLink
+      ? (deepLink.startsWith('http') ? deepLink : `${baseUrl}${deepLink.startsWith('/') ? '' : '/'}${deepLink}`)
+      : baseUrl;
+
+    // Apply appropriate TTL and priority based on notification type
+    // Calls: 60s TTL, high priority 10
+    // Nudges: 300s TTL, high priority 10
+    // Normal messages & reminders: 86400s (24h) TTL, standard priority 5
+    const isUrgent = type === 'call' || type === 'nudge';
+    const ttl = type === 'call' ? 60 : (type === 'nudge' ? 300 : 86400);
+    const priority = isUrgent ? 10 : 5;
+
+    const payload = {
+      app_id: oneSignalAppId,
+      include_aliases: {
+        external_id: [targetUserId],
+      },
+      target_channel: 'push',
+      headings: { en: title },
+      contents: { en: body || 'New update from your partner.' },
+      chrome_web_icon: `${baseUrl}/pwa-192x192.png`,
+      chrome_web_badge: `${baseUrl}/logo.svg`,
+      priority,
+      android_priority: priority,
+      delayed_option: 'immediate',
+      ttl,
+      url: notifUrl,
+      data: {
+        type,
+        senderId: user.uid,
+        targetUserId,
+        url: notifUrl,
+        eventId,
+        correlationId,
+      },
+    };
+
+    console.info(`[Push] [${correlationId}] Sending ${type} push to target=${targetUserId.slice(0, 6)}... (priority=${priority}, ttl=${ttl}s)`);
+
+    // Bounded request timeout (8 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
 
     let notificationId = null;
     let recipients = 0;
     let requestAccepted = false;
-    let reason = 'no_push_key';
+    let reason = 'unknown';
 
-    if (oneSignalApiKey && oneSignalAppId) {
-      const authHeader = oneSignalApiKey.startsWith('Key ') || oneSignalApiKey.startsWith('Basic ')
-        ? oneSignalApiKey
-        : oneSignalApiKey.startsWith('os_v2_app_')
-        ? `Key ${oneSignalApiKey}`
-        : `Basic ${oneSignalApiKey}`;
-
-      const baseUrl = 'https://av-space-311906.web.app';
-      const notifUrl = deepLink ? (deepLink.startsWith('http') ? deepLink : `${baseUrl}${deepLink.startsWith('/') ? '' : '/'}${deepLink}`) : baseUrl;
-
-      const payload = {
-        app_id: oneSignalAppId,
-        include_aliases: {
-          external_id: [targetUserId],
+    try {
+      const osRes = await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authHeader,
         },
-        target_channel: 'push',
-        headings: { en: String(title).slice(0, 100) },
-        contents: { en: String(body || '').slice(0, 300) },
-        chrome_web_icon: `${baseUrl}/pwa-192x192.png`,
-        chrome_web_badge: `${baseUrl}/logo.svg`,
-        priority: 10,
-        android_priority: 10,
-        delayed_option: 'immediate',
-        ttl: type === 'call' ? 120 : 86400,
-        url: notifUrl,
-        data: {
-          type,
-          senderId: user.uid,
-          targetUserId,
-          url: notifUrl,
-          eventId,
-          ...metadata,
-        },
-      };
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
 
-      try {
-        const osRes = await fetch('https://api.onesignal.com/notifications', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: authHeader,
-          },
-          body: JSON.stringify(payload),
-        });
+      clearTimeout(timeoutId);
+      const osData = await osRes.json().catch(() => null);
 
-        const osData = await osRes.json().catch(() => null);
-        if (osRes.ok) {
-          notificationId = osData?.id || null;
-          recipients = typeof osData?.recipients === 'number' ? osData.recipients : 1;
-          requestAccepted = true;
-          reason = recipients > 0 ? 'accepted' : 'no_matching_subscription';
+      if (osRes.ok) {
+        notificationId = osData?.id || null;
+        recipients = typeof osData?.recipients === 'number' ? osData.recipients : 0;
+        requestAccepted = true;
+        reason = recipients > 0 ? 'accepted' : 'zero_recipients';
 
-          // If no matching subscription found via aliases, try external_user_ids fallback
-          if (recipients === 0) {
-            try {
-              const legacyPayload = {
-                ...payload,
-                include_aliases: undefined,
-                target_channel: undefined,
-                include_external_user_ids: [targetUserId],
-                channel_for_external_user_ids: 'push',
-              };
-              const legRes = await fetch('https://api.onesignal.com/notifications', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: authHeader,
-                },
-                body: JSON.stringify(legacyPayload),
-              });
-              if (legRes.ok) {
-                const legData = await legRes.json().catch(() => null);
-                if (typeof legData?.recipients === 'number' && legData.recipients > 0) {
-                  notificationId = legData.id;
-                  recipients = legData.recipients;
-                  reason = 'accepted_legacy';
-                }
+        // If include_aliases reported 0 recipients, try legacy include_external_user_ids fallback
+        if (recipients === 0) {
+          try {
+            const legacyPayload = {
+              ...payload,
+              include_aliases: undefined,
+              target_channel: undefined,
+              include_external_user_ids: [targetUserId],
+              channel_for_external_user_ids: 'push',
+            };
+            const legRes = await fetch('https://api.onesignal.com/notifications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: authHeader,
+              },
+              body: JSON.stringify(legacyPayload),
+            });
+            if (legRes.ok) {
+              const legData = await legRes.json().catch(() => null);
+              if (typeof legData?.recipients === 'number' && legData.recipients > 0) {
+                notificationId = legData.id;
+                recipients = legData.recipients;
+                reason = 'accepted_legacy';
               }
-            } catch (legErr) {}
-          }
-        } else {
-          console.warn('[Push] OneSignal API notice:', osData);
-          reason = osData?.errors?.[0] || `http_${osRes.status}`;
+            }
+          } catch (legErr) {}
         }
-      } catch (osErr) {
-        console.error('[Push] OneSignal fetch error:', osErr.message);
-        reason = osErr.message;
+
+        console.info(`[Push] [${correlationId}] OneSignal response: accepted=${requestAccepted}, recipients=${recipients}, id=${notificationId}`);
+      } else {
+        const errorDetail = osData?.errors?.[0] || `http_${osRes.status}`;
+        console.warn(`[Push] [${correlationId}] OneSignal rejected:`, errorDetail);
+        requestAccepted = false;
+        reason = errorDetail;
       }
+    } catch (osErr) {
+      clearTimeout(timeoutId);
+      const isAbort = osErr.name === 'AbortError';
+      console.error(`[Push] [${correlationId}] OneSignal dispatch error:`, isAbort ? 'timeout' : osErr.message);
+      requestAccepted = false;
+      reason = isAbort ? 'network_timeout' : osErr.message;
     }
 
-    // Always record Firestore notification so foreground app and in-app center immediately receive it
-    if (db) {
-      try {
-        await db.collection('couples').doc(coupleId).collection('notifications').add({
-          title,
-          body,
-          type,
-          senderId: user.uid,
-          senderName: user.displayName || 'Partner',
-          deepLink,
-          metadata: { ...metadata, recipientId: targetUserId },
-          read: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      } catch (dbErr) {
-        console.warn('[Push] Firestore notification record notice:', dbErr.message);
-      }
-    }
-
-    return res.json({
-      success: true,
-      requestAccepted: true,
+    // Return honest, structured results
+    return res.status(200).json({
+      provider: 'onesignal',
+      requestAccepted,
       notificationId,
-      recipients,
-      reason: requestAccepted ? reason : 'synced_via_realtime',
+      recipients, // Exactly as returned by OneSignal; never default to 1
+      reason,
+      correlationId,
     });
   } catch (err) {
-    console.error('[Push Server] send-push error:', err.message);
-    return res.status(500).json({ error: err.message, success: false, requestAccepted: false, reason: err.message });
+    console.error(`[Push Server] [${correlationId}] send-push unexpected error:`, err.message);
+    return res.status(500).json({
+      provider: 'onesignal',
+      error: err.message,
+      requestAccepted: false,
+      recipients: 0,
+      reason: err.message,
+      correlationId,
+    });
   }
 });
 

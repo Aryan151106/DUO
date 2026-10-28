@@ -18,3 +18,7 @@ services:
         sync: false
       - key: LIVEKIT_API_SECRET
         sync: false
+      - key: ONESIGNAL_APP_ID
+        sync: false
+      - key: ONESIGNAL_REST_API_KEY
+        sync: false
