@@ -167,6 +167,7 @@ export const SettingsModal: React.FC = () => {
     summary: string;
     recipients?: number;
     notificationId?: string | null;
+    correlationId?: string;
     reason?: string;
   } | null>(null);
 
@@ -176,6 +177,7 @@ export const SettingsModal: React.FC = () => {
     summary: string;
     recipients?: number;
     notificationId?: string | null;
+    correlationId?: string;
     reason?: string;
   } | null>(null);
 
@@ -327,6 +329,7 @@ export const SettingsModal: React.FC = () => {
           summary: `✓ OneSignal accepted request for ${res.recipients} registered device(s)!`,
           recipients: res.recipients,
           notificationId: res.notificationId,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       } else if (res.requestAccepted && res.recipients === 0) {
@@ -335,6 +338,7 @@ export const SettingsModal: React.FC = () => {
           summary: `⚠️ OneSignal accepted request, but reported 0 active recipients for your account (${currentUser.id}). Tap "Subscribe Phone" above to link this device.`,
           recipients: 0,
           notificationId: res.notificationId,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       } else {
@@ -342,6 +346,7 @@ export const SettingsModal: React.FC = () => {
           status: 'error',
           summary: `❌ Push request failed: ${res.reason || 'Server error'}`,
           recipients: res.recipients,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       }
@@ -385,6 +390,7 @@ export const SettingsModal: React.FC = () => {
           summary: `✓ OneSignal accepted request for ${res.recipients} device(s) belonging to ${partnerName}!`,
           recipients: res.recipients,
           notificationId: res.notificationId,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       } else if (res.requestAccepted && res.recipients === 0) {
@@ -393,6 +399,7 @@ export const SettingsModal: React.FC = () => {
           summary: `⚠️ OneSignal accepted request, but reported 0 devices for ${partnerName}. ${partnerName} must open DUO on their phone and tap "Subscribe Phone".`,
           recipients: 0,
           notificationId: res.notificationId,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       } else {
@@ -400,6 +407,7 @@ export const SettingsModal: React.FC = () => {
           status: 'error',
           summary: `❌ Push request failed: ${res.reason || 'Server error'}`,
           recipients: res.recipients,
+          correlationId: res.correlationId,
           reason: res.reason,
         });
       }
@@ -996,7 +1004,7 @@ export const SettingsModal: React.FC = () => {
           </p>
 
           {/* Quick status summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
             <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
               <span className="block text-[10px] text-[var(--text-muted)] font-bold">Browser Permission</span>
               <span className={`font-ui font-bold text-xs truncate block ${
@@ -1008,9 +1016,17 @@ export const SettingsModal: React.FC = () => {
             <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
               <span className="block text-[10px] text-[var(--text-muted)] font-bold">Service Worker</span>
               <span className={`font-ui font-bold text-xs truncate block ${
-                swStatus.active ? 'text-emerald-600' : 'text-amber-500'
+                osState.isServiceWorkerReady || swStatus.active ? 'text-emerald-600' : 'text-amber-500'
               }`}>
-                {swStatus.active ? 'Active (Root) ✓' : swStatus.registered ? 'Registering...' : 'Not Active'}
+                {osState.isServiceWorkerReady || swStatus.active ? 'Active (Root) ✓' : swStatus.registered ? 'Registering...' : 'Not Active'}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+              <span className="block text-[10px] text-[var(--text-muted)] font-bold">OneSignal SDK</span>
+              <span className={`font-ui font-bold text-xs truncate block ${
+                osState.isInitialized ? 'text-emerald-600' : osState.initError ? 'text-red-500' : 'text-amber-500'
+              }`}>
+                {osState.isInitialized ? 'Initialized ✓' : osState.initError ? 'Init Error ✕' : 'Connecting...'}
               </span>
             </div>
             <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
@@ -1018,7 +1034,7 @@ export const SettingsModal: React.FC = () => {
               <span className={`font-ui font-bold text-xs truncate block ${
                 osState.isOptedIn && osState.subscriptionId ? 'text-emerald-600' : 'text-amber-500'
               }`}>
-                {osState.isOptedIn && osState.subscriptionId ? 'Opted In ✓' : 'Not Subscribed'}
+                {osState.isOptedIn && osState.subscriptionId ? `Opted In (${osState.subscriptionId.slice(0, 6)}…) ✓` : 'Not Subscribed'}
               </span>
             </div>
             <div className="p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
@@ -1026,7 +1042,7 @@ export const SettingsModal: React.FC = () => {
               <span className={`font-ui font-bold text-xs truncate block ${
                 osState.isLinkedToUser ? 'text-emerald-600' : 'text-amber-500'
               }`}>
-                {osState.isLinkedToUser ? 'UID Linked ✓' : 'Not Linked'}
+                {osState.isLinkedToUser ? `UID Linked (${currentUser?.id?.slice(0, 6)}…) ✓` : 'Not Linked'}
               </span>
             </div>
           </div>
@@ -1108,7 +1124,7 @@ export const SettingsModal: React.FC = () => {
 
           {serverPushResult && (
             <div
-              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed space-y-1.5 ${
                 serverPushResult.status === 'success'
                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                   : serverPushResult.status === 'warning'
@@ -1116,22 +1132,30 @@ export const SettingsModal: React.FC = () => {
                   : 'bg-red-500/10 text-red-600 border-red-500/30'
               }`}
             >
-              <span className="font-bold block mb-0.5">Server Push Test (To Your Phone):</span>
+              <span className="font-bold block">Server Push Test (To Your Phone):</span>
               <p>{serverPushResult.summary}</p>
-              {serverPushResult.recipients !== undefined && (
-                <div className="mt-1 font-mono text-[11px] opacity-90">
-                  Confirmed OneSignal Recipients: <strong>{serverPushResult.recipients}</strong>
-                  {serverPushResult.notificationId && (
-                    <span className="block truncate">Notification ID: {serverPushResult.notificationId}</span>
-                  )}
-                </div>
-              )}
+              <div className="font-mono text-[11px] opacity-90 space-y-0.5 pt-1 border-t border-current/10">
+                {serverPushResult.recipients !== undefined && (
+                  <div>Confirmed OneSignal Recipients: <strong>{serverPushResult.recipients}</strong></div>
+                )}
+                {serverPushResult.notificationId && (
+                  <div className="truncate">OneSignal Notification ID: {serverPushResult.notificationId}</div>
+                )}
+                {serverPushResult.correlationId && (
+                  <div className="truncate">Correlation ID: {serverPushResult.correlationId}</div>
+                )}
+              </div>
+              <p className="text-[10px] opacity-80 pt-1 leading-normal">
+                {serverPushResult.status === 'success'
+                  ? 'Note: Acceptance and recipient count confirm OneSignal queued delivery to Apple/Google push gateways. Final display on phone requires internet access, notifications enabled in OS settings, and no active Focus/DND mode.'
+                  : 'Troubleshooting: If timed out, the Render free server was sleeping and is waking up—please retry in 15s. If 0 recipients, ensure your phone is subscribed. Check Render logs for duo-socket-server or OneSignal Dashboard → Delivery using the Correlation ID.'}
+              </p>
             </div>
           )}
 
           {partnerTestResult && (
             <div
-              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed ${
+              className={`text-xs font-ui p-3 rounded-xl border leading-relaxed space-y-1.5 ${
                 partnerTestResult.status === 'success'
                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
                   : partnerTestResult.status === 'warning'
@@ -1139,16 +1163,24 @@ export const SettingsModal: React.FC = () => {
                   : 'bg-red-500/10 text-red-600 border-red-500/30'
               }`}
             >
-              <span className="font-bold block mb-0.5">Partner Push Alert Test:</span>
+              <span className="font-bold block">Partner Push Alert Test:</span>
               <p>{partnerTestResult.summary}</p>
-              {partnerTestResult.recipients !== undefined && (
-                <div className="mt-1 font-mono text-[11px] opacity-90">
-                  Confirmed OneSignal Recipients: <strong>{partnerTestResult.recipients}</strong>
-                  {partnerTestResult.notificationId && (
-                    <span className="block truncate">Notification ID: {partnerTestResult.notificationId}</span>
-                  )}
-                </div>
-              )}
+              <div className="font-mono text-[11px] opacity-90 space-y-0.5 pt-1 border-t border-current/10">
+                {partnerTestResult.recipients !== undefined && (
+                  <div>Confirmed OneSignal Recipients: <strong>{partnerTestResult.recipients}</strong></div>
+                )}
+                {partnerTestResult.notificationId && (
+                  <div className="truncate">OneSignal Notification ID: {partnerTestResult.notificationId}</div>
+                )}
+                {partnerTestResult.correlationId && (
+                  <div className="truncate">Correlation ID: {partnerTestResult.correlationId}</div>
+                )}
+              </div>
+              <p className="text-[10px] opacity-80 pt-1 leading-normal">
+                {partnerTestResult.status === 'success'
+                  ? 'Note: Push accepted by OneSignal for partner. Partner device must have internet and allow notifications.'
+                  : 'Troubleshooting: Ensure partner opened DUO on their phone and tapped "Subscribe Phone". Check Render logs or OneSignal Dashboard using Correlation ID.'}
+              </p>
             </div>
           )}
 

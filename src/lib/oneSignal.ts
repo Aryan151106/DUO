@@ -31,6 +31,7 @@ export interface SubscriptionDiagnosticState {
   isLinkedToUser: boolean;
   isIos: boolean;
   isStandalone: boolean;
+  isServiceWorkerReady: boolean;
 }
 
 /**
@@ -211,6 +212,7 @@ export function getOneSignalSubscriptionState(currentUserId?: string): Subscript
       isLinkedToUser: false,
       isIos,
       isStandalone,
+      isServiceWorkerReady: false,
     };
   }
 
@@ -226,9 +228,15 @@ export function getOneSignalSubscriptionState(currentUserId?: string): Subscript
     'PushManager' in window &&
     (!isIos || isStandalone);
 
+  const isServiceWorkerReady =
+    typeof navigator !== 'undefined' &&
+    'serviceWorker' in navigator &&
+    Boolean(navigator.serviceWorker.controller || (win as any).__swRegistered);
+
   return {
     isSupported,
     permission: perm,
+    isServiceWorkerReady,
     isInitialized,
     initError,
     isOptedIn: Boolean(sub?.optedIn),
@@ -432,7 +440,8 @@ export async function sendOneSignalPush(params: {
   try {
     const idToken = await auth.currentUser.getIdToken();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 9000);
+    // 25s timeout to allow Render free tier to wake up from cold start spin-down
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
 
     const res = await fetch(`${socketUrl}/api/push/send`, {
       method: 'POST',
@@ -486,7 +495,7 @@ export async function sendOneSignalPush(params: {
       success: false,
       requestAccepted: false,
       recipients: 0,
-      reason: isTimeout ? 'network_timeout' : (err?.message || 'push_request_failed'),
+      reason: isTimeout ? 'server_timeout_possible_cold_start' : (err?.message || 'push_request_failed'),
       correlationId,
     } as any;
   }

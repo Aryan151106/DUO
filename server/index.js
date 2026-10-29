@@ -897,7 +897,11 @@ io.on('connection', (socket) => {
   const uid = socket.data.uid;
   console.log(`[Socket] User connected: ${uid} (socket ${socket.id})`);
 
-  setupGameSocketHandlers(io, socket, db, admin, isProduction, verifyUserCoupleMembership);
+  try {
+    setupGameSocketHandlers(io, socket, db, admin, isProduction, verifyUserCoupleMembership);
+  } catch (gameErr) {
+    console.error('[Socket] setupGameSocketHandlers registration error:', gameErr);
+  }
 
   let joinedRoomId = null;
 

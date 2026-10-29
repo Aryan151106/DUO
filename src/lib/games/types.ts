@@ -2,13 +2,48 @@ export type GameType = 'tic-tac-toe' | 'connect-four' | 'chess' | 'guess-from-do
 
 export type GameMode = 'online' | 'local';
 
-export type GameStatus = 'waiting' | 'active' | 'finished' | 'abandoned';
+export type GameStatus = 'waiting' | 'setup' | 'active' | 'finished' | 'abandoned';
+
+export interface DiscColorOption {
+  id: string;
+  name: string;
+  hex: string;
+  border: string;
+}
+
+export const C4_COLOR_PALETTE: DiscColorOption[] = [
+  { id: 'red', name: 'Ruby Red', hex: '#ff3d5a', border: '#b3152d' },
+  { id: 'yellow', name: 'Sunny Yellow', hex: '#ffd23a', border: '#b89205' },
+  { id: 'cyan', name: 'Ocean Cyan', hex: '#2bb5d4', border: '#12738a' },
+  { id: 'pink', name: 'Bubblegum Pink', hex: '#ff5d8f', border: '#c72859' },
+  { id: 'purple', name: 'Cosmic Purple', hex: '#9b5de5', border: '#5f23a6' },
+  { id: 'green', name: 'Emerald Green', hex: '#00d59b', border: '#028560' },
+];
+
+export interface PlayerChoice {
+  role?: string; // 'X' | 'O', 'w' | 'b', 'drawer' | 'guesser'
+  color?: string; // hex color for Connect Four
+  colorName?: string;
+  firstPlayerPreference?: 'me' | 'partner' | 'random';
+  isReady: boolean;
+}
+
+export interface LobbyState {
+  conflict: string | null;
+  firstPlayer?: string | null;
+  allReady: boolean;
+}
 
 export interface PlayerInfo {
   id: string;
   displayName: string;
   avatarUrl?: string;
   role?: string; // e.g. 'X' | 'O', 'r' | 'y', 'w' | 'b', 'drawer' | 'guesser'
+  color?: string;
+  colorName?: string;
+  isReady?: boolean;
+  choice?: PlayerChoice;
+  isConnected?: boolean;
 }
 
 export interface GameResult {
@@ -27,9 +62,10 @@ export interface TicTacToeState {
 }
 
 export interface ConnectFourState {
-  grid: Array<Array<'r' | 'y' | null>>; // 6 rows x 7 columns
+  grid: Array<Array<string | null>>; // 6 rows x 7 columns (supports 'r' | 'y' or hex colors)
   winningCells: Array<[number, number]> | null;
   lastDrop?: [number, number] | null;
+  playerColors?: Record<string, string>; // Maps role/playerId -> hex color
 }
 
 export interface ChessState {
@@ -49,6 +85,15 @@ export interface DoodleStroke {
   points: Array<{ x: number; y: number }>;
   color: string;
   width: number;
+}
+
+export interface DoodleStrokeChunk {
+  strokeId: string;
+  points: Array<{ x: number; y: number }>;
+  color: string;
+  width: number;
+  isNewStroke: boolean;
+  isComplete: boolean;
 }
 
 export interface DoodleState {
@@ -78,11 +123,13 @@ export interface GameSession {
   players: Record<string, PlayerInfo>;
   currentTurnPlayerId: string | null;
   state: AnyGameState;
+  lobbyState?: LobbyState | null;
   result?: GameResult | null;
   actionSeq: number; // Incrementing counter to reject stale or duplicated actions
   createdAt: string;
   updatedAt: string;
   rematchRequestedBy?: string | null;
+  rematchMode?: 'keep' | 'change' | null;
 }
 
 // ─── Game Statistics & Winning Streaks ──────────────────────────────────────

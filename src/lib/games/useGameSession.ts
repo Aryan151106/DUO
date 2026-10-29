@@ -7,7 +7,9 @@ import type {
   GameMode,
   GameSession,
   GameStatus,
+  PlayerChoice,
   DoodleStroke,
+  DoodleStrokeChunk,
   TicTacToeState,
   ConnectFourState,
   ChessState,
@@ -28,6 +30,23 @@ import { applyChessMove, createInitialChessState } from './engines/chessEngine';
 import { getRandomWord, maskSecretWord } from './engines/doodleWords';
 import confetti from 'canvas-confetti';
 
+function createInitialGameStateForType(type: GameType, p1Id: string, p2Id: string) {
+  if (type === 'tic-tac-toe') return createInitialTicTacToeState();
+  if (type === 'connect-four') return createInitialConnectFourState();
+  if (type === 'chess') return createInitialChessState();
+  return {
+    round: 1,
+    totalRounds: 4,
+    drawerId: p1Id,
+    guesserId: p2Id,
+    secretWordMasked: '____',
+    secretWordLength: 4,
+    revealedHints: 0,
+    doodleStrokes: [],
+    isGuessed: false,
+  };
+}
+
 export function useGameSession(gameType: GameType, mode: GameMode) {
   const { currentUser, partnerUser, couple } = useAuthStore();
   const coupleId = couple?.id || 'couple-duo';
@@ -37,9 +56,11 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
   const [session, setSession] = useState<GameSession | null>(null);
   const [secretWord, setSecretWord] = useState<string | null>(null);
   const [doodleStrokes, setDoodleStrokes] = useState<DoodleStroke[]>([]);
+  const [incomingLiveChunk, setIncomingLiveChunk] = useState<DoodleStrokeChunk | null>(null);
   const [status, setStatus] = useState<GameStatus | 'connecting' | 'reconnecting' | 'error'>('connecting');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rematchRequested, setRematchRequested] = useState(false);
+  const [rematchMode, setRematchMode] = useState<'keep' | 'change' | null>(null);
   const [localPlayers, setLocalPlayers] = useState(getLocalPlayerNames());
 
   const socketRef = useRef<any>(null);
@@ -62,39 +83,23 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     const p2Id = 'p2';
     const now = new Date().toISOString();
 
-    let initialState: any = null;
-    let p1Role = '';
-    let p2Role = '';
-    let localSecret: string | null = null;
+    let p1Role = 'X';
+    let p2Role = 'O';
+    let p1Color = '#ff3d5a';
+    let p2Color = '#ffd23a';
 
     if (gameType === 'tic-tac-toe') {
-      initialState = createInitialTicTacToeState();
       p1Role = 'X';
       p2Role = 'O';
     } else if (gameType === 'connect-four') {
-      initialState = createInitialConnectFourState();
-      p1Role = 'r';
-      p2Role = 'y';
+      p1Role = '#ff3d5a';
+      p2Role = '#ffd23a';
     } else if (gameType === 'chess') {
-      initialState = createInitialChessState();
       p1Role = 'w';
       p2Role = 'b';
     } else if (gameType === 'guess-from-doodle') {
-      localSecret = getRandomWord();
-      initialState = {
-        round: 1,
-        totalRounds: 4,
-        drawerId: p1Id,
-        guesserId: p2Id,
-        secretWordMasked: maskSecretWord(localSecret, 0),
-        secretWordLength: localSecret.length,
-        revealedHints: 0,
-        doodleStrokes: [],
-        isGuessed: false,
-      };
       p1Role = 'drawer';
       p2Role = 'guesser';
-      setSecretWord(localSecret);
     }
 
     const freshSession: GameSession = {
@@ -102,26 +107,50 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
       coupleId: 'local',
       gameType,
       mode: 'local',
-      status: 'active',
+      status: 'setup',
       playerIds: [p1Id, p2Id],
       players: {
-        [p1Id]: { id: p1Id, displayName: pNames.player1Name, role: p1Role },
-        [p2Id]: { id: p2Id, displayName: pNames.player2Name, role: p2Role },
+        [p1Id]: {
+          id: p1Id,
+          displayName: pNames.player1Name,
+          role: p1Role,
+          color: p1Color,
+          colorName: 'Ruby Red',
+          choice: {
+            role: p1Role,
+            color: p1Color,
+            colorName: 'Ruby Red',
+            isReady: false,
+          },
+        },
+        [p2Id]: {
+          id: p2Id,
+          displayName: pNames.player2Name,
+          role: p2Role,
+          color: p2Color,
+          colorName: 'Sunny Yellow',
+          choice: {
+            role: p2Role,
+            color: p2Color,
+            colorName: 'Sunny Yellow',
+            isReady: false,
+          },
+        },
       },
       currentTurnPlayerId: p1Id,
-      state: initialState,
+      state: createInitialGameStateForType(gameType, p1Id, p2Id),
+      lobbyState: {
+        conflict: null,
+        allReady: false,
+      },
       actionSeq: 1,
       createdAt: now,
       updatedAt: now,
     };
 
-    if (localSecret) {
-      (freshSession as any).secretWord = localSecret;
-    }
-
     setSession(freshSession);
     saveLocalSession(freshSession);
-    setStatus('active');
+    setStatus('setup');
   }, [gameType]);
 
   // ─── Online Mode Socket & Firestore Synchronization ───────────────────────
@@ -145,7 +174,6 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
         if (snap.exists()) {
           const data = snap.data() as GameSession;
           setSession((prev) => {
-            // Keep higher actionSeq or update
             if (!prev || (data.actionSeq || 0) >= (prev.actionSeq || 0)) {
               return data;
             }
@@ -189,6 +217,17 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           setSecretWord(word);
         });
 
+        socket.on('game:doodle_stroke_chunk', ({ chunk }: { chunk: DoodleStrokeChunk }) => {
+          if (!isMounted) return;
+          setIncomingLiveChunk(chunk);
+          if (chunk.isComplete && chunk.points?.length > 1) {
+            setDoodleStrokes((prev) => [
+              ...prev,
+              { points: chunk.points, color: chunk.color, width: chunk.width },
+            ]);
+          }
+        });
+
         socket.on('game:doodle_stroke', ({ stroke }: { stroke: DoodleStroke }) => {
           if (!isMounted) return;
           setDoodleStrokes((prev) => [...prev, stroke]);
@@ -199,14 +238,24 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           setDoodleStrokes([]);
         });
 
-        socket.on('game:rematch_requested', () => {
+        socket.on('game:rematch_requested', ({ mode: rMode }: { mode?: 'keep' | 'change' }) => {
           if (!isMounted) return;
           setRematchRequested(true);
+          setRematchMode(rMode || 'keep');
+        });
+
+        socket.on('game:rematch_setup', () => {
+          if (!isMounted) return;
+          setRematchRequested(false);
+          setRematchMode(null);
+          setStatus('setup');
+          setDoodleStrokes([]);
         });
 
         socket.on('game:rematch_started', () => {
           if (!isMounted) return;
           setRematchRequested(false);
+          setRematchMode(null);
           setDoodleStrokes([]);
         });
 
@@ -248,14 +297,198 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
       if (socketRef.current) {
         socketRef.current.off('game:session_state');
         socketRef.current.off('game:secret_word');
+        socketRef.current.off('game:doodle_stroke_chunk');
         socketRef.current.off('game:doodle_stroke');
         socketRef.current.off('game:doodle_clear');
         socketRef.current.off('game:rematch_requested');
+        socketRef.current.off('game:rematch_setup');
         socketRef.current.off('game:rematch_started');
         socketRef.current.off('game:partner_left');
       }
     };
   }, [gameType, isOnline, coupleId, myUid, currentUser.displayName, currentUser.avatarUrl, initLocalSession]);
+
+  // ─── Select Choice in Lobby ───────────────────────────────────────────────
+  const selectChoice = useCallback(
+    async (choice: Partial<PlayerChoice>, targetPlayerId?: string) => {
+      if (!session) return;
+
+      if (isOnline) {
+        if (!socketRef.current) return;
+        return new Promise<void>((resolve, reject) => {
+          socketRef.current.emit(
+            'game:select_choice',
+            {
+              sessionId: session.id,
+              choice,
+            },
+            (res: any) => {
+              if (res?.error) reject(new Error(res.error));
+              else resolve();
+            }
+          );
+        });
+      } else {
+        // Local choice update
+        const pId = targetPlayerId || 'p1';
+        const p1Id = session.playerIds[0] || 'p1';
+        const p2Id = session.playerIds[1] || 'p2';
+
+        const updatedPlayer = {
+          ...session.players[pId],
+          choice: {
+            ...(session.players[pId]?.choice || { isReady: false }),
+            ...choice,
+            isReady: false,
+          },
+        };
+
+        const updatedPlayers = {
+          ...session.players,
+          [pId]: updatedPlayer,
+        };
+
+        // Check local conflict
+        const c1 = (updatedPlayers[p1Id]?.choice || {}) as Partial<PlayerChoice>;
+        const c2 = (updatedPlayers[p2Id]?.choice || {}) as Partial<PlayerChoice>;
+        let conflict: string | null = null;
+
+        if (gameType === 'tic-tac-toe') {
+          if (c1.role && c2.role && c1.role === c2.role) {
+            conflict = `Both players selected ${c1.role}! One partner must choose ${c1.role === 'X' ? 'O' : 'X'}.`;
+          }
+        } else if (gameType === 'connect-four') {
+          const col1 = (c1.color || '#ff3d5a').toLowerCase();
+          const col2 = (c2.color || '#ffd23a').toLowerCase();
+          if (col1 === col2) {
+            conflict = 'Both players selected the same disc color! Please pick different colors.';
+          }
+        } else if (gameType === 'chess') {
+          if (c1.role && c2.role && c1.role === c2.role && c1.role !== 'random') {
+            conflict = `Both players selected ${c1.role === 'w' ? 'White' : 'Black'}! One partner must choose the other side.`;
+          }
+        } else if (gameType === 'guess-from-doodle') {
+          if (c1.role && c2.role && c1.role === c2.role && c1.role === 'drawer') {
+            conflict = 'Both players chose to draw first! One partner must choose to guess.';
+          }
+        }
+
+        const nextSession: GameSession = {
+          ...session,
+          players: updatedPlayers,
+          lobbyState: {
+            conflict,
+            allReady: false,
+          },
+          updatedAt: new Date().toISOString(),
+        };
+
+        setSession(nextSession);
+        saveLocalSession(nextSession);
+      }
+    },
+    [session, isOnline, gameType]
+  );
+
+  // ─── Confirm Ready in Lobby ───────────────────────────────────────────────
+  const confirmReady = useCallback(
+    async (isReady: boolean, _targetPlayerId?: string) => {
+      if (!session) return;
+
+      if (isOnline) {
+        if (!socketRef.current) return;
+        return new Promise<void>((resolve, reject) => {
+          socketRef.current.emit(
+            'game:confirm_ready',
+            {
+              sessionId: session.id,
+              isReady,
+            },
+            (res: any) => {
+              if (res?.error) reject(new Error(res.error));
+              else resolve();
+            }
+          );
+        });
+      } else {
+        // Local pass-and-play start
+        const p1Id = session.playerIds[0] || 'p1';
+        const p2Id = session.playerIds[1] || 'p2';
+        const c1 = (session.players[p1Id]?.choice || {}) as Partial<PlayerChoice>;
+        const c2 = (session.players[p2Id]?.choice || {}) as Partial<PlayerChoice>;
+
+        let initialState: any = null;
+        let p1Role = c1.role || 'X';
+        let p2Role = c2.role || 'O';
+        let startingTurn = p1Id;
+
+        if (gameType === 'tic-tac-toe') {
+          p1Role = c1.role || 'X';
+          p2Role = p1Role === 'X' ? 'O' : 'X';
+          initialState = createInitialTicTacToeState();
+          startingTurn = p1Role === 'X' ? p1Id : p2Id;
+        } else if (gameType === 'connect-four') {
+          const col1 = c1.color || '#ff3d5a';
+          const col2 = c2.color || '#ffd23a';
+          initialState = {
+            ...createInitialConnectFourState(),
+            playerColors: { [p1Id]: col1, [p2Id]: col2 },
+          };
+          p1Role = col1;
+          p2Role = col2;
+          startingTurn = p1Id;
+        } else if (gameType === 'chess') {
+          let s1 = c1.role || 'w';
+          let s2 = c2.role || (s1 === 'w' ? 'b' : 'w');
+          if (s1 === 'random' || s2 === 'random') {
+            s1 = Math.random() < 0.5 ? 'w' : 'b';
+            s2 = s1 === 'w' ? 'b' : 'w';
+          }
+          p1Role = s1;
+          p2Role = s2;
+          initialState = createInitialChessState();
+          startingTurn = p1Role === 'w' ? p1Id : p2Id;
+        } else if (gameType === 'guess-from-doodle') {
+          const localSecret = getRandomWord();
+          setSecretWord(localSecret);
+          const isP1Drawer = c1.role !== 'guesser' && c2.role !== 'drawer';
+          const drawerId = isP1Drawer ? p1Id : p2Id;
+          const guesserId = isP1Drawer ? p2Id : p1Id;
+          initialState = {
+            round: 1,
+            totalRounds: 4,
+            drawerId,
+            guesserId,
+            secretWordMasked: maskSecretWord(localSecret, 0),
+            secretWordLength: localSecret.length,
+            revealedHints: 0,
+            doodleStrokes: [],
+            isGuessed: false,
+          };
+          p1Role = isP1Drawer ? 'drawer' : 'guesser';
+          p2Role = isP1Drawer ? 'guesser' : 'drawer';
+          startingTurn = drawerId;
+        }
+
+        const startedSession: GameSession = {
+          ...session,
+          status: 'active',
+          players: {
+            [p1Id]: { ...session.players[p1Id], role: p1Role },
+            [p2Id]: { ...session.players[p2Id], role: p2Role },
+          },
+          currentTurnPlayerId: startingTurn,
+          state: initialState,
+          updatedAt: new Date().toISOString(),
+        };
+
+        setSession(startedSession);
+        saveLocalSession(startedSession);
+        setStatus('active');
+      }
+    },
+    [session, isOnline, gameType]
+  );
 
   // ─── Make Move Handler ────────────────────────────────────────────────────
   const makeMove = useCallback(
@@ -297,7 +530,7 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           winner = res.winner ? currentTurn : null;
           isDraw = res.isDraw;
         } else if (gameType === 'connect-four') {
-          const res = applyConnectFourMove(session.state as ConnectFourState, movePayload.col, (pRole as 'r' | 'y') || 'r');
+          const res = applyConnectFourMove(session.state as ConnectFourState, movePayload.col, pRole || '#ff3d5a');
           nextState = res.nextState;
           winner = res.winner ? currentTurn : null;
           isDraw = res.isDraw;
@@ -337,7 +570,16 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     [session, isOnline, gameType]
   );
 
-  // ─── Doodle Guess Actions ─────────────────────────────────────────────────
+  // ─── Doodle Guess Actions (Live Chunk Streaming) ──────────────────────────
+  const sendStrokeChunk = useCallback(
+    (chunk: DoodleStrokeChunk) => {
+      if (isOnline && socketRef.current && session) {
+        socketRef.current.emit('game:doodle_stroke_chunk', { sessionId: session.id, chunk });
+      }
+    },
+    [isOnline, session]
+  );
+
   const sendStroke = useCallback(
     (stroke: DoodleStroke) => {
       setDoodleStrokes((prev) => [...prev, stroke]);
@@ -442,15 +684,40 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
   );
 
   // ─── Rematch & Leave ──────────────────────────────────────────────────────
-  const requestRematch = useCallback(async () => {
-    if (isOnline && socketRef.current && session) {
-      socketRef.current.emit('game:rematch', { sessionId: session.id });
-    } else if (!isOnline) {
-      clearLocalSession(gameType);
-      setDoodleStrokes([]);
-      initLocalSession();
-    }
-  }, [isOnline, session, gameType, initLocalSession]);
+  const requestRematch = useCallback(
+    async (options?: { mode?: 'keep' | 'change' }) => {
+      const rMode = options?.mode || 'keep';
+      if (isOnline && socketRef.current && session) {
+        socketRef.current.emit('game:rematch', { sessionId: session.id, mode: rMode });
+      } else if (!isOnline && session) {
+        if (rMode === 'change') {
+          // Reset to lobby
+          const p1Id = session.playerIds[0] || 'p1';
+          const p2Id = session.playerIds[1] || 'p2';
+          const nextSession: GameSession = {
+            ...session,
+            status: 'setup',
+            result: null,
+            players: {
+              [p1Id]: { ...session.players[p1Id], choice: { ...(session.players[p1Id]?.choice || { isReady: false }), isReady: false } },
+              [p2Id]: { ...session.players[p2Id], choice: { ...(session.players[p2Id]?.choice || { isReady: false }), isReady: false } },
+            },
+            lobbyState: { conflict: null, allReady: false },
+          };
+          setSession(nextSession);
+          saveLocalSession(nextSession);
+          setStatus('setup');
+          setDoodleStrokes([]);
+        } else {
+          // Keep choices, alternate starting player
+          clearLocalSession(gameType);
+          setDoodleStrokes([]);
+          initLocalSession();
+        }
+      }
+    },
+    [isOnline, session, gameType, initLocalSession]
+  );
 
   const leaveGame = useCallback(async () => {
     if (isOnline && socketRef.current && session) {
@@ -496,14 +763,20 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     partnerRole,
     secretWord,
     doodleStrokes,
+    incomingLiveChunk,
     rematchRequested,
+    rematchMode,
     localPlayers,
     activeUserId,
+    myUid,
     makeMove,
     sendStroke,
+    sendStrokeChunk,
     clearDoodle,
     requestHint,
     submitGuess,
+    selectChoice,
+    confirmReady,
     requestRematch,
     leaveGame,
     setLocalPlayerNamesConfig,

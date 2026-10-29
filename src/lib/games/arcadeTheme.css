@@ -257,20 +257,4 @@
   }
 }
 
-/* Accessibility: Respect Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-  .arcade-bg-float,
-  .arcade-mascot,
-  .arcade-wobble,
-  .arcade-ttt-stamp,
-  .arcade-dance,
-  .arcade-disc-drop,
-  .arcade-chess-eye,
-  .arcade-prop,
-  .arcade-shake,
-  .arcade-speech-bubble,
-  .arcade-ghost {
-    animation: none !important;
-    transition: none !important;
-  }
-}
+

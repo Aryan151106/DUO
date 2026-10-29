@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { Chess } from 'chess.js';
 import type { GameSession, ChessState } from '../../../lib/games/types';
 import { getLegalMovesForSquare, isPromotionMove } from '../../../lib/games/engines/chessEngine';
-import { GoofyChessPiece } from '../../../lib/games/arcadeAssets';
+import {
+  GoofyChessPiece,
+  CHESS_VICTIM_LINES,
+} from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 
 interface ChessBoardProps {
@@ -10,7 +13,7 @@ interface ChessBoardProps {
   isMyTurn: boolean;
   myRole: string;
   onMove: (payload: { from: string; to: string; promotion?: string }) => Promise<void>;
-  onRematch: () => void;
+  onRematch: (options?: { mode?: 'keep' | 'change' }) => void;
   onLeave: () => void;
   rematchRequested: boolean;
 }
@@ -27,6 +30,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoves, setLegalMoves] = useState<Array<{ from: string; to: string }>>([]);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
+  const [capturedBubble, setCapturedBubble] = useState<{ text: string; square: string } | null>(null);
+  const [ghostPiece, setGhostPiece] = useState<{ type: string; isWhite: boolean; square: string } | null>(null);
   const [moving, setMoving] = useState(false);
 
   const state = session.state as ChessState;
@@ -41,7 +46,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     ? session.players[session.currentTurnPlayerId]
     : null;
 
-  // Board orientation: White at bottom for player 1 / white player, flipped for black
+  // Board orientation: White at bottom for white player, flipped for black
   const isFlipped = session.mode === 'online' && myRole === 'b';
 
   const rows = isFlipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
@@ -86,6 +91,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLegalMoves([]);
     setPendingPromotion(null);
 
+    // Check if target has a piece to trigger funny capture bubble & ghost flyaway
+    const targetPiece = chess.get(to as any);
+    if (targetPiece) {
+      const victimLines = CHESS_VICTIM_LINES[targetPiece.type.toUpperCase()] || ['Oof!'];
+      const randomLine = victimLines[Math.floor(Math.random() * victimLines.length)];
+      setCapturedBubble({ text: randomLine, square: to });
+      setGhostPiece({ type: targetPiece.type, isWhite: targetPiece.color === 'w', square: to });
+      setTimeout(() => {
+        setCapturedBubble(null);
+        setGhostPiece(null);
+      }, 2000);
+    }
+
     try {
       await onMove({ from, to, promotion });
     } catch (e) {
@@ -96,7 +114,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(98vw,560px)] mx-auto space-y-2 relative px-0.5 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[min(98vw,640px)] mx-auto space-y-2.5 relative px-1 sm:px-0">
       {/* Header Info */}
       <div className="w-full text-center">
         {!isFinished ? (
@@ -114,7 +132,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 : `${turn === 'w' ? 'White' : 'Black'} to Move`}
             </span>
             {state.isCheck && (
-              <span className="px-2 py-0.5 bg-[#ff4d4d] text-white rounded-lg text-xs font-black animate-pulse">
+              <span className="px-2 py-0.5 bg-[#ff4d4d] text-white rounded-lg text-xs font-black animate-pulse arcade-shake">
                 CHECK! 😱
               </span>
             )}
@@ -135,36 +153,44 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
       {/* Captured Pieces Graveyard Top */}
       <div className="flex items-center justify-between w-full px-2 text-xs font-bold text-[var(--arcade-ink)]">
-        <div className="flex items-center gap-1 flex-wrap max-w-[200px]">
+        <div className="flex items-center gap-1 flex-wrap max-w-[240px]">
           {state.capturedBlack?.map((p, i) => (
-            <span key={i} className="w-5 h-5 inline-block opacity-80">
+            <span key={i} className="w-5 h-5 sm:w-6 sm:h-6 inline-block opacity-85">
               <GoofyChessPiece type={p} isWhite={false} />
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1 flex-wrap max-w-[200px] justify-end">
+        <div className="flex items-center gap-1 flex-wrap max-w-[240px] justify-end">
           {state.capturedWhite?.map((p, i) => (
-            <span key={i} className="w-5 h-5 inline-block opacity-80">
+            <span key={i} className="w-5 h-5 sm:w-6 sm:h-6 inline-block opacity-85">
               <GoofyChessPiece type={p} isWhite={true} />
             </span>
           ))}
         </div>
       </div>
 
-      {/* 8x8 Chessboard */}
-      <div className="relative p-1.5 sm:p-2.5 bg-[#2b2140] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(98vw,520px)]">
-        <div className="grid grid-cols-8 grid-rows-8 w-full h-full border-2 border-[var(--arcade-ink)] rounded-lg overflow-hidden">
+      {/* 8x8 Chessboard - Substantially Larger on Desktop while Covering Most Phone Screen */}
+      <div className="relative p-2 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(96vw,580px)]">
+        {/* Floating Capture Speech Bubble */}
+        {capturedBubble && (
+          <div className="arcade-speech-bubble top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+            {capturedBubble.text}
+          </div>
+        )}
+
+        <div className="grid grid-cols-8 grid-rows-8 w-full h-full border-2 border-[var(--arcade-ink)] rounded-lg overflow-hidden relative">
           {rows.map((r) =>
             cols.map((c) => {
               const file = String.fromCharCode('a'.charCodeAt(0) + c);
               const rank = (r + 1).toString();
               const squareName = `${file}${rank}`;
-              const piece = board[7 - r][c]; // chess.js board uses [0..7] where 0 is rank 8
+              const piece = board[7 - r][c];
               const isDark = (r + c) % 2 === 0;
               const isSelected = selectedSquare === squareName;
               const isLegal = legalMoves.some((m) => m.to === squareName);
               const isCheckKing =
                 state.isCheck && piece && piece.type === 'k' && piece.color === turn;
+              const hasGhost = ghostPiece && ghostPiece.square === squareName;
 
               return (
                 <div
@@ -173,7 +199,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   className={`aspect-square relative flex items-center justify-center cursor-pointer transition-colors ${
                     isDark ? 'bg-[var(--arcade-s2)]' : 'bg-[var(--arcade-s1)]'
                   } ${isSelected ? '!bg-[#ffe066] ring-2 ring-yellow-500 z-10' : ''} ${
-                    isCheckKing ? '!bg-[#ff5555] animate-pulse' : ''
+                    isCheckKing ? '!bg-[#ff5555] animate-pulse arcade-shake' : ''
                   }`}
                 >
                   {piece && (
@@ -182,9 +208,16 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                     </div>
                   )}
 
+                  {/* Ghost Piece Flyaway on Capture */}
+                  {hasGhost && (
+                    <div className="arcade-ghost w-[80%] h-[80%]">
+                      <GoofyChessPiece type={ghostPiece.type} isWhite={ghostPiece.isWhite} />
+                    </div>
+                  )}
+
                   {/* Legal move indicator dot */}
                   {isLegal && (
-                    <div className="absolute w-3.5 h-3.5 bg-[#2bb5d4] border border-[var(--arcade-ink)] rounded-full opacity-90 shadow pointer-events-none" />
+                    <div className="absolute w-3.5 h-3.5 sm:w-4 sm:h-4 bg-[#2bb5d4] border border-[var(--arcade-ink)] rounded-full opacity-90 shadow pointer-events-none" />
                   )}
                 </div>
               );
@@ -227,26 +260,35 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         </div>
       )}
 
-      {/* Footer Actions */}
-      <div className="flex items-center justify-center gap-3 w-full pt-2">
+      {/* Footer Actions / Rematch Options */}
+      <div className="flex items-center justify-center gap-2 sm:gap-3 w-full pt-2 flex-wrap">
         {isFinished ? (
-          <button
-            type="button"
-            onClick={onRematch}
-            className="arcade-btn arcade-btn-pink text-sm sm:text-base"
-          >
-            <GoogleIcon name="replay" size={18} />
-            <span>{rematchRequested ? 'Partner Ready! Tap for Rematch' : 'Play Again'}</span>
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onRematch({ mode: 'keep' })}
+              className="arcade-btn arcade-btn-pink text-xs sm:text-sm py-2 px-4"
+            >
+              <GoogleIcon name="replay" size={16} />
+              <span>{rematchRequested ? 'Partner Ready! Tap Play' : 'Play Again (Swap Sides)'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onRematch({ mode: 'change' })}
+              className="arcade-btn py-2 px-4 text-xs sm:text-sm bg-[#ffc233]"
+            >
+              <span>Change Sides ♟️</span>
+            </button>
+          </>
         ) : null}
 
         <button
           type="button"
           onClick={onLeave}
-          className="arcade-btn text-sm sm:text-base bg-white dark:bg-gray-800"
+          className="arcade-btn text-xs sm:text-sm py-2 px-4 bg-white dark:bg-gray-800"
         >
-          <GoogleIcon name="arrow_back" size={18} />
-          <span>Leave</span>
+          <GoogleIcon name="arrow_back" size={16} />
+          <span>Exit Game</span>
         </button>
       </div>
     </div>

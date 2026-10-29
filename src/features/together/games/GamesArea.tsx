@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { GameType, GameMode } from '../../../lib/games/types';
 import { useGameSession } from '../../../lib/games/useGameSession';
+import { GameLobby } from './GameLobby';
 import { TicTacToeBoard } from './TicTacToeBoard';
 import { ConnectFourBoard } from './ConnectFourBoard';
 import { ChessBoard } from './ChessBoard';
 import { DoodleBoard } from './DoodleBoard';
 import { GameStatsModal } from './GameStatsModal';
-import { FLOATING_EMOJIS } from '../../../lib/games/arcadeAssets';
+import { FLOATING_EMOJIS, MASCOT_JOKES } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 import '../../../lib/games/arcadeTheme.css';
 
@@ -33,7 +34,7 @@ const GAMES_LIST: GameCardMeta[] = [
     title: 'Connect Four',
     icon: '🔴',
     badge: 'Gravity Drop',
-    description: 'Drop discs into the 7-column arcade grid and connect 4 in a row!',
+    description: 'Customizable disc colors, 7-column arcade grid, connect 4 in a row!',
     tagColor: 'bg-[#2bb5d4] text-white',
   },
   {
@@ -41,15 +42,15 @@ const GAMES_LIST: GameCardMeta[] = [
     title: 'Goofy Chess',
     icon: '♟️',
     badge: 'Grandmaster (or goldfish)',
-    description: 'Animated googly-eyed pieces, real chess rules, castling & promotions!',
+    description: 'Animated googly-eyed pieces, capture reactions, castling & promotions!',
     tagColor: 'bg-[#ffc233] text-[#2b2140]',
   },
   {
     type: 'guess-from-doodle',
     title: 'Doodle Guess',
     icon: '🖍️',
-    badge: 'Draw & Guess',
-    description: 'One partner secretly draws, the other guesses what on earth it is!',
+    badge: 'Live Draw & Guess',
+    description: 'Live streaming drawing strokes in real time. Can your partner guess it?',
     tagColor: 'bg-[#a05cff] text-white',
   },
 ];
@@ -58,6 +59,7 @@ export const GamesArea: React.FC = () => {
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedMode, setSelectedMode] = useState<GameMode>('online');
   const [isMascotWobbling, setIsMascotWobbling] = useState(false);
+  const [mascotQuoteIndex, setMascotQuoteIndex] = useState(0);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEditingNames, setIsEditingNames] = useState(false);
 
@@ -70,6 +72,7 @@ export const GamesArea: React.FC = () => {
 
   const handleMascotPoke = () => {
     setIsMascotWobbling(true);
+    setMascotQuoteIndex((prev) => (prev + 1) % MASCOT_JOKES.length);
     setTimeout(() => setIsMascotWobbling(false), 500);
   };
 
@@ -85,8 +88,10 @@ export const GamesArea: React.FC = () => {
     setIsEditingNames(false);
   };
 
+  const currentJoke = MASCOT_JOKES[mascotQuoteIndex % MASCOT_JOKES.length];
+
   return (
-    <div className="silly-arcade w-full max-w-4xl mx-auto px-0.5 sm:px-4 py-1 sm:py-4 relative overflow-hidden min-h-[600px]">
+    <div className="silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 relative min-h-[600px]">
       {/* Floating game decorations */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden select-none -z-0">
         {FLOATING_EMOJIS.slice(0, 8).map((emoji, i) => (
@@ -105,15 +110,16 @@ export const GamesArea: React.FC = () => {
       </div>
 
       {/* Main Container */}
-      <div className="relative z-10 space-y-3 sm:space-y-6">
-        {/* Arcade Mascot & Title Banner (Only on Games Hub to save maximum screen space on mobile during gameplay) */}
-        {!selectedGame && (
-          <div className="text-center space-y-1">
+      <div className="relative z-10 space-y-4 sm:space-y-6">
+        {/* Arcade Mascot & Title Banner */}
+        {!selectedGame ? (
+          <div className="text-center space-y-2">
             <div
               onClick={handleMascotPoke}
               className={`arcade-mascot text-5xl sm:text-6xl inline-block cursor-pointer select-none ${
                 isMascotWobbling ? 'arcade-wobble' : ''
               }`}
+              title="Poke me!"
             >
               🤪
             </div>
@@ -123,7 +129,11 @@ export const GamesArea: React.FC = () => {
               <span className="text-xl sm:text-2xl">🎮</span>
             </h2>
 
-            <div className="flex items-center justify-center gap-2 pt-1">
+            <p className="font-extrabold text-xs sm:text-sm text-[var(--arcade-ink)] opacity-90 transition-all min-h-[1.5em] max-w-md mx-auto">
+              "{currentJoke}"
+            </p>
+
+            <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
               <button
                 type="button"
                 onClick={() => setIsStatsOpen(true)}
@@ -145,15 +155,15 @@ export const GamesArea: React.FC = () => {
               )}
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* ── Active Game View (Maximized for Mobile View) ── */}
+        {/* ── Active Game View (Substantially Larger on Desktop & Phone) ── */}
         {selectedGame ? (
-          <div className="arcade-card p-2 sm:p-5 w-full max-w-full sm:max-w-2xl mx-auto space-y-3 shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)]">
+          <div className="arcade-card p-3 sm:p-6 w-full max-w-full sm:max-w-3xl lg:max-w-4xl mx-auto space-y-4 shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[7px_7px_0_var(--arcade-ink)]">
             {/* Top Bar with Mode Indicator & Exit */}
-            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-2 px-1">
+            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-3 px-1">
               <div className="flex items-center gap-2">
-                <span className="text-2xl">
+                <span className="text-2xl sm:text-3xl">
                   {GAMES_LIST.find((g) => g.type === selectedGame)?.icon}
                 </span>
                 <div>
@@ -163,6 +173,17 @@ export const GamesArea: React.FC = () => {
                   <span className="text-[11px] sm:text-xs font-bold text-[var(--arcade-ink)] opacity-75">
                     {selectedMode === 'online' ? '🌐 Online Mode' : '📱 Local Pass-and-Play'}
                   </span>
+                </div>
+              </div>
+
+              {/* Mini Interactive Mascot */}
+              <div className="hidden sm:flex items-center gap-2">
+                <div
+                  onClick={handleMascotPoke}
+                  className={`text-2xl cursor-pointer select-none ${isMascotWobbling ? 'arcade-wobble' : ''}`}
+                  title="Poke me!"
+                >
+                  🤪
                 </div>
               </div>
 
@@ -198,19 +219,7 @@ export const GamesArea: React.FC = () => {
               </div>
             )}
 
-            {selectedMode === 'online' && activeSessionHook.status === 'waiting' && (
-              <div className="py-10 text-center space-y-3 bg-[var(--arcade-bg)] rounded-2xl border-2 border-[var(--arcade-ink)] p-4">
-                <div className="text-4xl animate-pulse">👫</div>
-                <h4 className="font-black text-lg text-[var(--arcade-ink)]">
-                  Waiting for your Partner to join…
-                </h4>
-                <p className="text-xs text-[var(--arcade-ink)] opacity-80 max-w-xs mx-auto">
-                  Ask your partner to open the Together Games tab on their phone or computer to play together!
-                </p>
-              </div>
-            )}
-
-            {/* Error or Abandoned State */}
+            {/* Error State */}
             {activeSessionHook.status === 'error' && (
               <div className="py-8 text-center space-y-3 bg-red-100 dark:bg-red-950/40 rounded-2xl border-2 border-red-500 p-4">
                 <div className="text-3xl">⚠️</div>
@@ -227,6 +236,7 @@ export const GamesArea: React.FC = () => {
               </div>
             )}
 
+            {/* Partner Abandoned State */}
             {activeSessionHook.status === 'abandoned' && (
               <div className="py-8 text-center space-y-3 bg-amber-100 rounded-2xl border-2 border-amber-500 p-4">
                 <div className="text-3xl">👋</div>
@@ -243,7 +253,19 @@ export const GamesArea: React.FC = () => {
               </div>
             )}
 
-            {/* Active or Finished Game Boards */}
+            {/* ── PRE-GAME LOBBY VIEW (Setup / Choice Phase) ── */}
+            {activeSessionHook.status === 'setup' && activeSessionHook.session && (
+              <GameLobby
+                session={activeSessionHook.session}
+                isOnline={selectedMode === 'online'}
+                myUid={activeSessionHook.myUid}
+                onSelectChoice={activeSessionHook.selectChoice}
+                onConfirmReady={activeSessionHook.confirmReady}
+                onLeave={() => setSelectedGame(null)}
+              />
+            )}
+
+            {/* ── ACTIVE / FINISHED MATCH VIEW ── */}
             {(activeSessionHook.status === 'active' || activeSessionHook.status === 'finished') &&
               activeSessionHook.session && (
                 <>
@@ -290,7 +312,9 @@ export const GamesArea: React.FC = () => {
                       myRole={activeSessionHook.myRole}
                       secretWord={activeSessionHook.secretWord}
                       doodleStrokes={activeSessionHook.doodleStrokes}
+                      incomingLiveChunk={activeSessionHook.incomingLiveChunk}
                       onSendStroke={activeSessionHook.sendStroke}
+                      onSendStrokeChunk={activeSessionHook.sendStrokeChunk}
                       onClear={activeSessionHook.clearDoodle}
                       onRequestHint={activeSessionHook.requestHint}
                       onSubmitGuess={activeSessionHook.submitGuess}
@@ -338,7 +362,7 @@ export const GamesArea: React.FC = () => {
 
               <p className="text-xs sm:text-sm font-semibold text-[var(--arcade-ink)] opacity-80 max-w-md mx-auto">
                 {selectedMode === 'online'
-                  ? '🌐 Play together in real time from separate devices over the internet. Never drops silently into local play.'
+                  ? '🌐 Play together in real time from separate devices over the internet with shared pre-game choice lobby!'
                   : `📱 Pass this device back and forth! (${activeSessionHook.localPlayers.player1Name} vs ${activeSessionHook.localPlayers.player2Name}) 100% playable offline.`}
               </p>
             </div>
@@ -374,12 +398,12 @@ export const GamesArea: React.FC = () => {
 
                   <div className="pt-4 mt-2 border-t border-[var(--arcade-ink)]/20 flex items-center justify-between">
                     <span className="text-xs font-bold text-[var(--arcade-ink)] opacity-70">
-                      {selectedMode === 'online' ? '2 Devices' : '1 Device'}
+                      {selectedMode === 'online' ? '2 Devices • Shared Lobby' : '1 Device • Pass & Play'}
                     </span>
                     <button
                       type="button"
                       onClick={() => setSelectedGame(game.type)}
-                      className="arcade-btn arcade-btn-pink text-sm py-2 px-5"
+                      className="arcade-btn arcade-btn-pink text-sm py-2 px-5 cursor-pointer"
                     >
                       <span>Play Now</span>
                       <GoogleIcon name="play_arrow" size={16} />

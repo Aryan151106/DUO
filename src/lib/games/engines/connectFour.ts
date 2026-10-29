@@ -12,7 +12,7 @@ export function createInitialConnectFourState(): ConnectFourState {
 }
 
 export function checkConnectFourWin(
-  grid: Array<Array<'r' | 'y' | null>>,
+  grid: Array<Array<string | null>>,
   r: number,
   c: number
 ): Array<[number, number]> | null {
@@ -62,10 +62,10 @@ export function checkConnectFourWin(
 export function applyConnectFourMove(
   state: ConnectFourState,
   col: number,
-  color: 'r' | 'y'
+  color: string
 ): {
   nextState: ConnectFourState;
-  winner: 'r' | 'y' | null;
+  winner: string | null;
   isDraw: boolean;
   winningCells: Array<[number, number]> | null;
 } {
@@ -98,6 +98,7 @@ export function applyConnectFourMove(
 
   return {
     nextState: {
+      ...state,
       grid: newGrid,
       winningCells,
       lastDrop: [targetRow, col],

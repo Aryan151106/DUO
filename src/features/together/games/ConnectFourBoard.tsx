@@ -8,7 +8,7 @@ interface ConnectFourBoardProps {
   isMyTurn: boolean;
   myRole: string;
   onMove: (payload: { col: number }) => Promise<void>;
-  onRematch: () => void;
+  onRematch: (options?: { mode?: 'keep' | 'change' }) => void;
   onLeave: () => void;
   rematchRequested: boolean;
 }
@@ -34,9 +34,20 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
     ? session.players[session.currentTurnPlayerId]
     : null;
 
+  // Resolve color hex from session players or fallback
+  const getCellColor = (val: string | null): string => {
+    if (!val) return '';
+    if (val.startsWith('#')) return val;
+    if (state.playerColors && state.playerColors[val]) return state.playerColors[val];
+    if (val === 'r') return '#ff3d5a';
+    if (val === 'y') return '#ffd23a';
+    return '#ff3d5a';
+  };
+
+  const currentTurnColor = currentTurnPlayer?.color || (currentTurnPlayer?.role === 'r' ? '#ff3d5a' : '#ffd23a');
+
   const handleColClick = async (col: number) => {
     if (isFinished || !isMyTurn || moving) return;
-    // Check if column is already full
     if (grid[0][col] !== null) {
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
@@ -58,15 +69,14 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(98vw,520px)] mx-auto space-y-2 px-0.5 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[min(98vw,640px)] mx-auto space-y-3 px-1 sm:px-0">
       {/* Header */}
       <div className="w-full text-center">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
             <span
-              className={`w-5 h-5 rounded-full border-2 border-[var(--arcade-ink)] inline-block ${
-                currentTurnPlayer?.role === 'r' ? 'bg-[#ff3d5a]' : 'bg-[#ffd23a]'
-              }`}
+              className="w-5 h-5 rounded-full border-2 border-[var(--arcade-ink)] inline-block shadow-xs"
+              style={{ backgroundColor: currentTurnColor }}
             />
             <span>
               {session.mode === 'online'
@@ -78,7 +88,7 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
           </div>
         ) : (
           <div className="inline-flex flex-col items-center gap-1 px-5 py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
-            <span className="text-2xl font-black">
+            <span className="text-xl sm:text-2xl font-black">
               {result?.outcome === 'draw'
                 ? '🤷 Board Full — It’s a Draw!'
                 : `🎉 ${result?.winnerName || 'Winner'} Connected Four!`}
@@ -90,15 +100,15 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         )}
       </div>
 
-      {/* Column Drop Touch Targets - Expanded for Mobile */}
-      <div className="grid grid-cols-7 gap-1 sm:gap-1.5 w-full max-w-[min(98vw,480px)] px-0.5 sm:px-2">
+      {/* Column Drop Touch Targets - Expanded for Tablet & Desktop */}
+      <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 w-full max-w-[min(96vw,600px)] px-1 sm:px-3">
         {Array.from({ length: C4_COLS }).map((_, c) => (
           <button
             key={c}
             type="button"
             disabled={isFinished || (!isMyTurn && session.mode === 'online') || grid[0][c] !== null}
             onClick={() => handleColClick(c)}
-            className="w-full py-2 sm:py-2 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 border-[var(--arcade-ink)] rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
+            className="w-full py-2 sm:py-2.5 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 sm:border-3 border-[var(--arcade-ink)] rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
             aria-label={`Drop disc in column ${c + 1}`}
           >
             <GoogleIcon name="arrow_downward" size={18} />
@@ -106,31 +116,32 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         ))}
       </div>
 
-      {/* 6x7 Arcade Board - Covers Most Screen Width on Phone */}
+      {/* 6x7 Arcade Board - Substantially Larger on Desktop while Covering Most Phone Screen */}
       <div
-        className={`p-1.5 sm:p-3 bg-[#2455d6] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full max-w-[min(98vw,480px)] ${
+        className={`p-2 sm:p-4 bg-[#2455d6] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full max-w-[min(96vw,600px)] ${
           shaking ? 'arcade-shake' : ''
         }`}
       >
-        <div className="grid grid-cols-7 gap-1 sm:gap-1.5">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
           {grid.map((row, r) =>
             row.map((cell, c) => {
               const winning = isCellWinning(r, c);
               const isLast = lastDrop && lastDrop[0] === r && lastDrop[1] === c;
+              const discColor = getCellColor(cell);
 
               return (
                 <div
                   key={`${r}-${c}`}
                   onClick={() => handleColClick(c)}
-                  className="aspect-square bg-[var(--arcade-bg)] dark:bg-[#1c1632] rounded-full border-2 border-[var(--arcade-ink)] relative overflow-hidden cursor-pointer"
+                  className="aspect-square bg-[var(--arcade-bg)] dark:bg-[#1c1632] rounded-full border-2 sm:border-3 border-[var(--arcade-ink)] relative overflow-hidden cursor-pointer"
                 >
                   {cell && (
                     <div
+                      key={`c4-disc-${r}-${c}-${session.actionSeq}`}
                       className={`absolute inset-[7%] rounded-full border-2 border-[var(--arcade-ink)] shadow-inner transition-transform ${
-                        cell === 'r' ? 'bg-[#ff3d5a]' : 'bg-[#ffd23a]'
-                      } ${isLast ? 'arcade-disc-drop' : ''} ${
-                        winning ? 'arcade-dance ring-4 ring-white shadow-lg' : ''
-                      }`}
+                        isLast ? 'arcade-disc-drop' : ''
+                      } ${winning ? 'arcade-dance ring-4 ring-white shadow-lg' : ''}`}
+                      style={{ backgroundColor: discColor }}
                     />
                   )}
                 </div>
@@ -140,26 +151,35 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         </div>
       </div>
 
-      {/* Footer Actions */}
-      <div className="flex items-center justify-center gap-3 w-full pt-2">
+      {/* Footer Actions / Rematch Options */}
+      <div className="flex items-center justify-center gap-2 sm:gap-3 w-full pt-2 flex-wrap">
         {isFinished ? (
-          <button
-            type="button"
-            onClick={onRematch}
-            className="arcade-btn arcade-btn-pink text-sm sm:text-base"
-          >
-            <GoogleIcon name="replay" size={18} />
-            <span>{rematchRequested ? 'Partner Ready! Tap for Rematch' : 'Play Again'}</span>
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => onRematch({ mode: 'keep' })}
+              className="arcade-btn arcade-btn-pink text-xs sm:text-sm py-2 px-4"
+            >
+              <GoogleIcon name="replay" size={16} />
+              <span>{rematchRequested ? 'Partner Ready! Tap Play' : 'Play Again'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onRematch({ mode: 'change' })}
+              className="arcade-btn py-2 px-4 text-xs sm:text-sm bg-[#ffc233]"
+            >
+              <span>Change Colors 🎨</span>
+            </button>
+          </>
         ) : null}
 
         <button
           type="button"
           onClick={onLeave}
-          className="arcade-btn text-sm sm:text-base bg-white dark:bg-gray-800"
+          className="arcade-btn text-xs sm:text-sm py-2 px-4 bg-white dark:bg-gray-800"
         >
-          <GoogleIcon name="arrow_back" size={18} />
-          <span>Leave</span>
+          <GoogleIcon name="arrow_back" size={16} />
+          <span>Exit Game</span>
         </button>
       </div>
     </div>
