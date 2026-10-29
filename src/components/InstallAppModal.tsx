@@ -38,7 +38,12 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200"
+    >
       <div
         className="w-full max-w-md bg-[var(--surface)] border-2 border-[var(--border)] rounded-3xl p-5 sm:p-6 shadow-[0_8px_0_var(--shadow-color)] flex flex-col gap-4 animate-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}

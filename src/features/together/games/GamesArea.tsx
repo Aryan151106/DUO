@@ -359,7 +359,7 @@ export const GamesArea: React.FC = () => {
             )}
 
             {/* ── MAIN PLAYING AREA & LIVE GAME CHAT (Side-by-Side on Desktop, Drawer on Phone) ── */}
-            <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center gap-4 sm:gap-6 w-full min-w-0">
+            <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center gap-4 sm:gap-6 w-full min-w-0 pb-16 lg:pb-0">
               <div className="flex-1 w-full flex flex-col items-center min-w-0">
                 {/* ── PRE-GAME LOBBY VIEW (Setup / Choice Phase) ── */}
                 {activeSessionHook.status === 'setup' && activeSessionHook.session && (
@@ -443,7 +443,9 @@ export const GamesArea: React.FC = () => {
                   myUid={activeSessionHook.myUid}
                   onSendMessage={activeSessionHook.sendChatMessage}
                   isConnected={
-                    activeSessionHook.status !== 'error' && activeSessionHook.status !== 'connecting'
+                    activeSessionHook.status !== 'error' &&
+                    activeSessionHook.status !== 'connecting' &&
+                    activeSessionHook.status !== 'reconnecting'
                   }
                 />
               )}

@@ -72,9 +72,13 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-[var(--overlay)] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-150"
     >
-      <div className="w-full sm:max-w-md bg-[var(--surface)] text-[var(--text)] border-t-3 sm:border-3 border-[var(--border)] rounded-t-3xl sm:rounded-3xl shadow-[0_6px_0_var(--shadow-color)] overflow-hidden max-h-[85vh] flex flex-col">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-md bg-[var(--surface)] text-[var(--text)] border-t-3 sm:border-3 border-[var(--border)] rounded-t-3xl sm:rounded-3xl shadow-[0_6px_0_var(--shadow-color)] overflow-hidden max-h-[88vh] max-h-[88dvh] flex flex-col"
+      >
         {/* Header Banner */}
         <div
           style={{ borderTopColor: event.color }}
@@ -211,11 +215,11 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t-2 border-[var(--border)] bg-[var(--surface-2)] flex items-center justify-between gap-2">
+        <div className="p-4 border-t-2 border-[var(--border)] bg-[var(--surface-2)] pb-[calc(14px+env(safe-area-inset-bottom,0px))] sm:pb-4 flex items-center justify-between gap-2 shrink-0">
           <button
             type="button"
             onClick={handleDeleteClick}
-            className="p-2.5 rounded-2xl bg-[var(--surface)] hover:bg-[var(--urgent)]/20 text-[var(--urgent)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer"
+            className="p-2.5 min-h-[44px] min-w-[44px] rounded-2xl bg-[var(--surface)] hover:bg-[var(--urgent)]/20 text-[var(--urgent)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer flex items-center justify-center"
             title="Delete Event"
           >
             <Trash2 className="w-4 h-4" />
@@ -229,7 +233,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 onDuplicate(event);
                 onClose();
               }}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky text-xs shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 min-h-[44px] rounded-2xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] text-[var(--text)] font-chunky text-xs shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer"
             >
               <Copy className="w-3.5 h-3.5" />
               <span>Duplicate</span>
@@ -242,7 +246,7 @@ export const EventDetailModal: React.FC<EventDetailModalProps> = ({
                 onEdit(event);
                 onClose();
               }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 min-h-[44px] rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs shadow-[0_2px_0_var(--shadow-color)] active:translate-y-0.5 active:shadow-none cursor-pointer"
             >
               <Edit2 className="w-3.5 h-3.5" />
               <span>Edit</span>

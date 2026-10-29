@@ -286,6 +286,45 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
       }
     };
 
+    const joinGameRoom = (socketInstance: any) => {
+      if (!isMounted || !socketInstance) return;
+      socketInstance.emit(
+        'game:join',
+        {
+          coupleId,
+          gameType,
+          displayName: currentUser?.displayName || 'Partner',
+          avatarUrl: currentUser?.avatarUrl || '',
+        },
+        (response: any) => {
+          if (!isMounted) return;
+          if (response?.error) {
+            setStatus('error');
+            setErrorMessage(response.error);
+          } else if (response?.session) {
+            setSession(response.session);
+            setStatus(response.session.status);
+            if (Array.isArray(response.session.chatMessages)) {
+              useActiveGameStore.getState().setChatMessages(sessionId, response.session.chatMessages);
+            }
+          }
+        }
+      );
+    };
+
+    const handleConnect = () => {
+      if (!isMounted) return;
+      if (activeSocket) {
+        joinGameRoom(activeSocket);
+      }
+    };
+
+    const handleDisconnect = (_reason?: string) => {
+      if (!isMounted) return;
+      // Do not resign, abandon, or mutate active game on temporary socket disconnection!
+      setStatus((prev) => (prev === 'active' || prev === 'setup' ? 'reconnecting' : prev));
+    };
+
     (async () => {
       try {
         const socket = await getGameSocket();
@@ -299,6 +338,8 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
         socketRef.current = socket;
 
         // Register exact named event listeners
+        socket.on('connect', handleConnect);
+        socket.on('disconnect', handleDisconnect);
         socket.on('game:session_state', handleSessionState);
         socket.on('game:secret_word', handleSecretWord);
         socket.on('game:doodle_stroke_chunk', handleStrokeChunk);
@@ -310,29 +351,10 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
         socket.on('game:partner_left', handlePartnerLeft);
         socket.on('game:chat_message', handleChatMessage);
 
-        // Join online game session room
-        socket.emit(
-          'game:join',
-          {
-            coupleId,
-            gameType,
-            displayName: currentUser?.displayName || 'Partner',
-            avatarUrl: currentUser?.avatarUrl || '',
-          },
-          (response: any) => {
-            if (!isMounted) return;
-            if (response?.error) {
-              setStatus('error');
-              setErrorMessage(response.error);
-            } else if (response?.session) {
-              setSession(response.session);
-              setStatus(response.session.status);
-              if (Array.isArray(response.session.chatMessages)) {
-                useActiveGameStore.getState().setChatMessages(sessionId, response.session.chatMessages);
-              }
-            }
-          }
-        );
+        // Join online game session room if socket is already connected
+        if (socket.connected) {
+          joinGameRoom(socket);
+        }
       } catch (err: any) {
         if (!isMounted) return;
         setStatus('error');
@@ -345,6 +367,8 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
       unsubFirestore();
       if (activeSocket) {
         // Remove only the specific named handlers registered above
+        activeSocket.off('connect', handleConnect);
+        activeSocket.off('disconnect', handleDisconnect);
         activeSocket.off('game:session_state', handleSessionState);
         activeSocket.off('game:secret_word', handleSecretWord);
         activeSocket.off('game:doodle_stroke_chunk', handleStrokeChunk);
@@ -787,8 +811,8 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
       }
 
       if (isOnline) {
-        if (!socketRef.current) {
-          throw new Error('Not connected to game server');
+        if (!socketRef.current || !socketRef.current.connected) {
+          throw new Error('Not connected to game server. Please wait for reconnection.');
         }
         return new Promise<void>((resolve, reject) => {
           socketRef.current.emit(
@@ -798,6 +822,10 @@ export function useGameSession(gameType: GameType | null, mode: GameMode) {
               if (response?.error) {
                 reject(new Error(response.error));
               } else {
+                // Reliably add acknowledged message locally so that if broadcast is delayed/missed, message still appears
+                if (response?.message) {
+                  useActiveGameStore.getState().addChatMessage(session.id, response.message);
+                }
                 resolve();
               }
             }

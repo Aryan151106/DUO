@@ -771,8 +771,10 @@ export const TaskList: React.FC = () => {
       {/* DOODLE PREVIEW MODAL */}
       {doodlePreviewUrl && (
         <div
+          role="dialog"
+          aria-modal="true"
           onClick={() => setDoodlePreviewUrl(null)}
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}

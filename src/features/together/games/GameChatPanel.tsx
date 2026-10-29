@@ -191,15 +191,24 @@ export const GameChatPanel: React.FC<GameChatPanelProps> = ({
 
       {/* Error Notice */}
       {errorMessage && (
-        <div className="bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-300 text-[11px] font-bold px-3 py-1 border-t border-red-300 flex items-center justify-between">
+        <div className="bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-300 text-[11px] font-bold px-3 py-1.5 border-t border-red-300 flex items-center justify-between">
           <span className="truncate">{errorMessage}</span>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-xs font-black ml-2"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <button
+              type="button"
+              onClick={() => handleSend()}
+              className="text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-lg hover:bg-red-700 cursor-pointer"
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => setErrorMessage(null)}
+              className="text-xs font-black cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
@@ -283,11 +292,11 @@ export const GameChatPanel: React.FC<GameChatPanelProps> = ({
       {isChatOpenMobile && (
         <div
           onClick={handleCloseMobileChat}
-          className="lg:hidden fixed inset-0 z-[45] flex items-end justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 pb-[calc(76px+env(safe-area-inset-bottom,0px))] sm:pb-4"
+          className="lg:hidden fixed inset-0 z-[60] flex items-end justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4 pb-[calc(14px+env(safe-area-inset-bottom,0px))] sm:pb-4"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md h-[460px] max-h-[75vh] arcade-card border-3 border-[var(--arcade-ink)] shadow-[5px_5px_0_var(--arcade-ink)] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-200"
+            className="w-full max-w-md h-[min(500px,82dvh)] max-h-[82dvh] arcade-card border-3 border-[var(--arcade-ink)] shadow-[5px_5px_0_var(--arcade-ink)] overflow-hidden flex flex-col animate-in slide-in-from-bottom-4 duration-200"
             role="dialog"
             aria-modal="true"
             aria-label="In-game chat window"

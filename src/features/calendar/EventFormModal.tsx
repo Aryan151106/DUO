@@ -253,20 +253,24 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 bg-[var(--overlay)] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-[var(--overlay)] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-150"
     >
-      <div className="w-full sm:max-w-lg bg-[var(--surface)] text-[var(--text)] border-t-3 sm:border-3 border-[var(--border)] rounded-t-3xl sm:rounded-3xl shadow-[0_6px_0_var(--shadow-color)] max-h-[90vh] flex flex-col overflow-hidden">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-lg bg-[var(--surface)] text-[var(--text)] border-t-3 sm:border-3 border-[var(--border)] rounded-t-3xl sm:rounded-3xl shadow-[0_6px_0_var(--shadow-color)] max-h-[88vh] max-h-[88dvh] flex flex-col overflow-hidden"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b-2 border-[var(--border)] bg-[var(--surface-2)]">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] flex items-center justify-center text-xl shadow-[0_2px_0_var(--shadow-color)]">
+        <div className="shrink-0 flex items-center justify-between p-4 sm:p-5 border-b-2 border-[var(--border)] bg-[var(--surface-2)]">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] flex items-center justify-center text-xl shadow-[0_2px_0_var(--shadow-color)] shrink-0">
               {icon}
             </div>
-            <div>
-              <h3 className="font-chunky text-lg font-bold text-[var(--text)] leading-tight">
+            <div className="min-w-0">
+              <h3 className="font-chunky text-lg font-bold text-[var(--text)] leading-tight truncate">
                 {initialEvent ? 'Edit Event' : 'New Shared Event'}
               </h3>
-              <p className="font-ui text-xs text-[var(--text-muted)]">
+              <p className="font-ui text-xs text-[var(--text-muted)] truncate">
                 Syncs live between both members
               </p>
             </div>
@@ -274,15 +278,18 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-9 h-9 rounded-xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] cursor-pointer"
+            aria-label="Close event modal"
+            className="w-10 h-10 min-w-[40px] rounded-xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border-2 border-[var(--border)] flex items-center justify-center text-[var(--text)] cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* Title */}
+        {/* Form Container */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Scrollable Form Body */}
+          <div className="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 min-h-0 overscroll-contain">
+            {/* Title */}
           <div>
             <label className="block text-xs font-ui font-semibold text-[var(--text)] mb-1.5">
               Event Title *
@@ -673,18 +680,20 @@ export const EventFormModal: React.FC<EventFormModalProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="pt-3 border-t-2 border-[var(--border)] flex items-center justify-end gap-3">
+          </div>
+
+          {/* Sticky Action Footer */}
+          <div className="shrink-0 p-4 border-t-2 border-[var(--border)] bg-[var(--surface)] pb-[calc(14px+env(safe-area-inset-bottom,0px))] sm:pb-4 flex items-center justify-end gap-3 z-10 shadow-[0_-2px_8px_rgba(0,0,0,0.03)]">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl bg-[var(--surface-2)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs cursor-pointer shadow-[0_2px_0_var(--shadow-color)]"
+              className="px-5 py-2.5 min-h-[44px] rounded-2xl bg-[var(--surface-2)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs cursor-pointer shadow-[0_2px_0_var(--shadow-color)]"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs shadow-[0_3px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none cursor-pointer"
+              className="px-6 py-2.5 min-h-[44px] rounded-2xl bg-[var(--accent)] text-[var(--text)] border-2 border-[var(--border)] font-chunky font-bold text-xs shadow-[0_3px_0_var(--shadow-color)] active:translate-y-1 active:shadow-none cursor-pointer"
             >
               {initialEvent ? 'Save Changes' : 'Create Event'}
             </button>

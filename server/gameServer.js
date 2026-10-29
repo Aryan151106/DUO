@@ -76,6 +76,39 @@ const serverSessions = new Map();
 const userChatRateLimit = new Map();
 
 /**
+ * Retrieves a session from in-memory cache or authoritatively restores from Firestore.
+ */
+async function getOrRestoreSession(sessionId, socketCoupleId, db) {
+  let session = serverSessions.get(sessionId);
+  if (!session && db) {
+    let coupleId = socketCoupleId;
+    if (!coupleId && typeof sessionId === 'string') {
+      const match = sessionId.match(/^game-(.+)-(tic-tac-toe|connect-four|chess|guess-from-doodle)$/);
+      if (match) {
+        coupleId = match[1];
+      }
+    }
+    if (coupleId) {
+      try {
+        const docSnap = await db.collection('couples').doc(coupleId).collection('gameSessions').doc(sessionId).get();
+        if (docSnap.exists) {
+          const data = docSnap.data();
+          session = {
+            ...data,
+            secretWord: data.secretWord || null,
+            chatMessages: Array.isArray(data.chatMessages) ? data.chatMessages : [],
+          };
+          serverSessions.set(sessionId, session);
+        }
+      } catch (err) {
+        console.warn('[GameServer] getOrRestoreSession Firestore error:', err.message);
+      }
+    }
+  }
+  return session;
+}
+
+/**
  * Evaluates whether current choices between the two players in the lobby conflict.
  */
 function evaluateLobbyConflict(session) {
@@ -247,30 +280,14 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
 
       socket.join(socketRoom);
       socket.data.currentGameSessionId = sessionId;
+      socket.data.coupleId = coupleId;
 
-      let session = serverSessions.get(sessionId);
-
-      // Restore session from Firestore if missing from server memory
-      if (!session && db) {
-        try {
-          const docSnap = await db.collection('couples').doc(coupleId).collection('gameSessions').doc(sessionId).get();
-          if (docSnap.exists) {
-            const data = docSnap.data();
-            session = {
-              ...data,
-              secretWord: data.secretWord || null,
-              chatMessages: Array.isArray(data.chatMessages) ? data.chatMessages : [],
-            };
-            serverSessions.set(sessionId, session);
-          }
-        } catch (err) {
-          console.warn('[GameServer] Error restoring session from Firestore:', err.message);
-        }
-      }
+      let session = await getOrRestoreSession(sessionId, coupleId, db);
 
       const nowIso = new Date().toISOString();
 
-      if (!session || session.status === 'finished' || session.status === 'abandoned') {
+      const isExistingPlayer = Boolean(session && session.players && session.players[uid]);
+      if (!session || (!isExistingPlayer && (session.status === 'finished' || session.status === 'abandoned'))) {
         // Initialize fresh game session in setup/lobby state
         let defaultRole = 'X';
         let defaultColor = '#ff3d5a';
@@ -995,9 +1012,16 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
         return;
       }
 
-      const session = serverSessions.get(sessionId);
+      const session = await getOrRestoreSession(sessionId, socket.data.coupleId, db);
       if (!session || !session.playerIds.includes(uid)) {
         if (typeof callback === 'function') callback({ error: 'Session not found or unauthorized' });
+        return;
+      }
+
+      // Authoritative couple membership check
+      const isMember = await verifyUserCoupleMembership(uid, session.coupleId);
+      if (!isMember) {
+        if (typeof callback === 'function') callback({ error: 'Unauthorized: Not a couple member' });
         return;
       }
 

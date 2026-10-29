@@ -147,8 +147,16 @@ export const SoundChooserModal: React.FC<SoundChooserModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-[var(--overlay)] backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-lg rounded-3xl bg-[var(--surface)] border-3 border-[var(--border)] shadow-[0_8px_0_var(--shadow-color)] overflow-hidden flex flex-col max-h-[85vh]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-[var(--overlay)] backdrop-blur-xs animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-lg rounded-3xl bg-[var(--surface)] border-3 border-[var(--border)] shadow-[0_8px_0_var(--shadow-color)] overflow-hidden flex flex-col max-h-[88vh] max-h-[88dvh]"
+      >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b-2 border-[var(--border)] flex items-center justify-between">
           <div className="flex items-center gap-2">

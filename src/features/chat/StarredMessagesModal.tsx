@@ -62,9 +62,13 @@ export const StarredMessagesModal: React.FC<StarredMessagesModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="starred-modal-title"
-      className="fixed inset-0 z-50 bg-[var(--overlay)]/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] bg-[var(--overlay)]/70 backdrop-blur-xs flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 animate-in fade-in duration-150"
     >
-      <div className="w-full max-w-lg max-h-[85vh] bg-[var(--surface)] text-[var(--text)] border-3 border-[var(--border)] rounded-3xl shadow-[0_6px_0_var(--shadow-color)] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-lg max-h-[88vh] max-h-[88dvh] bg-[var(--surface)] text-[var(--text)] border-t-3 sm:border-3 border-[var(--border)] rounded-t-3xl sm:rounded-3xl shadow-[0_6px_0_var(--shadow-color)] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-150 pb-[calc(14px+env(safe-area-inset-bottom,0px))] sm:pb-0"
+      >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b-2 border-[var(--border)] flex items-center justify-between gap-3 shrink-0 bg-[var(--surface-2)]/50">
           <div className="flex items-center gap-2.5 min-w-0">

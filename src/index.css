@@ -409,7 +409,7 @@ nav.mobile-bottom-nav {
   background: var(--surface);
   border-top: 2px solid var(--border);
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.05);
-  z-index: 50;
+  z-index: 40;
   gap: 6px;
 }
 

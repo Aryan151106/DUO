@@ -83,6 +83,26 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
   // Attachments
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
 
+  // Handle Escape key to close
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  // Lock body scroll while open
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
   // Reset or initialize when opened
   useEffect(() => {
     if (isOpen) {
@@ -253,23 +273,27 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-[var(--overlay)] backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-[var(--overlay)] backdrop-blur-sm animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--surface)] border-3 border-[var(--border)] p-5 sm:p-6 shadow-[0_8px_0_var(--shadow-color)] scrollbar-none">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative flex flex-col w-full sm:max-w-lg max-h-[88vh] max-h-[88dvh] rounded-t-3xl sm:rounded-3xl bg-[var(--surface)] border-t-3 sm:border-3 border-[var(--border)] shadow-[0_8px_0_var(--shadow-color)] overflow-hidden animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200"
+      >
         {/* Top Decorative Border Accent */}
-        <div className="absolute top-0 left-0 right-0 h-2 rounded-t-3xl bg-[var(--partner-a)]" />
+        <div className="absolute top-0 left-0 right-0 h-2 bg-[var(--partner-a)] z-20 pointer-events-none sm:rounded-t-3xl" />
 
-        {/* Modal Header */}
-        <div className="flex items-center justify-between mb-4 pt-1">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] text-[var(--text)] flex items-center justify-center">
+        {/* Pinned Modal Header */}
+        <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 sm:px-6 sm:pt-5 border-b-2 border-[var(--border)] bg-[var(--surface)] relative z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-[var(--accent)] border-2 border-[var(--border)] shadow-[0_2px_0_var(--shadow-color)] text-[var(--text)] flex items-center justify-center shrink-0">
               <Sparkles className="w-5 h-5 stroke-[2.2]" />
             </div>
-            <div>
-              <h2 className="text-xl font-chunky font-bold text-[var(--text)] leading-tight">
+            <div className="min-w-0">
+              <h2 className="text-xl font-chunky font-bold text-[var(--text)] leading-tight truncate">
                 New Task
               </h2>
-              <p className="text-xs font-ui text-[var(--text-muted)]">
+              <p className="text-xs font-ui text-[var(--text-muted)] truncate">
                 Add something for yourself, your teammate, or both of you
               </p>
             </div>
@@ -277,14 +301,18 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 min-w-[44px] min-h-[44px] rounded-2xl border-2 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer flex items-center justify-center"
+            aria-label="Close modal"
+            className="p-2 min-w-[44px] min-h-[44px] rounded-2xl border-2 border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors cursor-pointer flex items-center justify-center shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Mission Title */}
+        {/* Form Container */}
+        <form id="create-task-form" onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* Scrollable Form Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 overscroll-contain space-y-4">
+            {/* Mission Title */}
           <div>
             <label className="block text-xs font-chunky font-bold text-[var(--text)] mb-1.5 uppercase tracking-wide">
               Task Title *
@@ -646,8 +674,10 @@ export const CreateTaskModal: React.FC<CreateTaskModalProps> = ({
             )}
           </div>
 
-          {/* Submit & Cancel Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t-2 border-[var(--border)]">
+          </div>
+
+          {/* Pinned Sticky Footer */}
+          <div className="shrink-0 flex items-center justify-end gap-2.5 px-5 py-3 sm:px-6 sm:py-3.5 border-t-2 border-[var(--border)] bg-[var(--surface)] pb-[calc(14px+env(safe-area-inset-bottom,0px))] sm:pb-3.5 relative z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.03)]">
             <button
               type="button"
               onClick={onClose}

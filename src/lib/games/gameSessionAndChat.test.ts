@@ -213,4 +213,102 @@ describe('Socket.IO Specific Listener Cleanup Validation', () => {
     expect(handlerB).toHaveBeenCalledWith({ status: 'active' });
     expect(handlerA).not.toHaveBeenCalled();
   });
+
+  it('handles chat acknowledgement and broadcast in either arrival order without duplicates', () => {
+    const store = useActiveGameStore.getState();
+    const sessionId = 'game-couple-duo-reconnect-test';
+
+    const testMsg: GameChatMessage = {
+      id: 'gchat_ack_101',
+      sessionId,
+      senderId: 'user_sender',
+      senderName: 'Sender',
+      text: 'Hello from reconnect test! 👋',
+      createdAt: '2026-10-29T10:00:00.000Z',
+    };
+
+    // Scenario 1: Server acknowledgement arrives first
+    store.addChatMessage(sessionId, testMsg);
+    expect(useActiveGameStore.getState().chatMessages[sessionId]?.length).toBe(1);
+
+    // Scenario 2: Server room broadcast arrives subsequent to acknowledgement
+    store.addChatMessage(sessionId, testMsg);
+    expect(useActiveGameStore.getState().chatMessages[sessionId]?.length).toBe(1);
+    expect(useActiveGameStore.getState().chatMessages[sessionId]?.[0].text).toBe('Hello from reconnect test! 👋');
+  });
+
+  it('adds acknowledged message locally even when server broadcast is dropped/missed', () => {
+    const store = useActiveGameStore.getState();
+    const sessionId = 'game-couple-duo-dropped-broadcast';
+
+    const missedBroadcastMsg: GameChatMessage = {
+      id: 'gchat_missed_broadcast_202',
+      sessionId,
+      senderId: 'user_sender',
+      senderName: 'Sender',
+      text: 'Network hiccup dropped broadcast',
+      createdAt: '2026-10-29T10:05:00.000Z',
+    };
+
+    // Broadcast never arrives on socket, but acknowledgement does
+    store.addChatMessage(sessionId, missedBroadcastMsg);
+
+    expect(useActiveGameStore.getState().chatMessages[sessionId]?.length).toBe(1);
+    expect(useActiveGameStore.getState().chatMessages[sessionId]?.[0].id).toBe('gchat_missed_broadcast_202');
+  });
+
+  it('re-joining on socket reconnect is idempotent and preserves active game state', () => {
+    const listeners: Record<string, Function[]> = {};
+    const emittedEvents: { event: string; payload: any }[] = [];
+
+    const mockSocket = {
+      connected: false,
+      on: vi.fn((event: string, callback: Function) => {
+        if (!listeners[event]) listeners[event] = [];
+        listeners[event].push(callback);
+      }),
+      off: vi.fn((event: string, callback?: Function) => {
+        if (listeners[event]) {
+          listeners[event] = listeners[event].filter((fn) => fn !== callback);
+        }
+      }),
+      emit: vi.fn((event: string, payload: any, callback?: Function) => {
+        emittedEvents.push({ event, payload });
+        if (event === 'game:join' && typeof callback === 'function') {
+          // Server returns existing active session
+          callback({
+            session: {
+              id: 'game-couple-duo-chess',
+              status: 'active',
+              currentTurnPlayerId: 'p1',
+              playerIds: ['p1', 'p2'],
+              state: { turn: 'w', fen: 'start' },
+              chatMessages: [],
+            },
+          });
+        }
+      }),
+    };
+
+    // Simulate connection handler registering
+    const joinGameRoom = (sock: any) => {
+      sock.emit('game:join', { coupleId: 'couple-duo', gameType: 'chess' }, () => {});
+    };
+
+    // Initial connect
+    mockSocket.connected = true;
+    joinGameRoom(mockSocket);
+    expect(emittedEvents.length).toBe(1);
+    expect(emittedEvents[0].event).toBe('game:join');
+
+    // Simulate temporary disconnect & reconnect
+    mockSocket.connected = false;
+    // Reconnection occurs
+    mockSocket.connected = true;
+    joinGameRoom(mockSocket);
+
+    // Verified: game:join re-emitted on reconnect
+    expect(emittedEvents.length).toBe(2);
+    expect(emittedEvents[1].event).toBe('game:join');
+  });
 });

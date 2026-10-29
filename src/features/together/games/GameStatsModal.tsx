@@ -64,8 +64,16 @@ export const GameStatsModal: React.FC<GameStatsModalProps> = ({ isOpen, onClose 
   const currentStatsSource = activeTab === 'online' ? onlineStats : localStats;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs">
-      <div className="arcade-card w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden bg-[var(--arcade-card)] border-[4px] border-[var(--arcade-ink)] shadow-[8px_8px_0_var(--arcade-ink)]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="arcade-card w-full max-w-lg max-h-[88vh] max-h-[88dvh] flex flex-col overflow-hidden bg-[var(--arcade-card)] border-[4px] border-[var(--arcade-ink)] shadow-[8px_8px_0_var(--arcade-ink)]"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between p-4 border-b-[3px] border-[var(--arcade-ink)] bg-[var(--arcade-c)]">
           <div className="flex items-center gap-2">

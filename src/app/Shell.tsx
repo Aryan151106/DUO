@@ -225,8 +225,8 @@ export const Shell: React.FC = () => {
       <main
         className={`lg:col-start-2 ${activeTab === 'settings' ? 'lg:row-start-2' : 'lg:row-start-1'} w-full h-full min-h-0 view ${
           activeTab === 'chat' || activeTab === 'doodle'
-            ? 'overflow-hidden flex flex-col pb-[calc(60px+env(safe-area-inset-bottom))] lg:pb-0'
-            : 'overflow-y-auto pb-[calc(76px+env(safe-area-inset-bottom))] lg:pb-8'
+            ? 'overflow-hidden flex flex-col pb-[calc(64px+env(safe-area-inset-bottom,0px))] lg:pb-0'
+            : 'overflow-y-auto pb-[calc(76px+env(safe-area-inset-bottom,0px))] lg:pb-8'
         }`}
       >
         <div
