@@ -172,11 +172,11 @@
   }
 }
 
-/* Chess Eyes Animation */
+/* Chess Eyes & Propeller Animation */
 .arcade-chess-eye {
   transform-box: fill-box;
   transform-origin: center;
-  animation: arcade-eye-look 1.8s ease-in-out infinite alternate;
+  animation: arcade-eye-look 1.6s ease-in-out infinite alternate;
 }
 
 @keyframes arcade-eye-look {
@@ -188,73 +188,97 @@
 .arcade-prop {
   transform-box: fill-box;
   transform-origin: center;
-  animation: arcade-prop-spin 0.28s linear infinite alternate;
+  animation: arcade-prop-spin 0.25s linear infinite alternate;
 }
 
 @keyframes arcade-prop-spin {
-  to { transform: scaleX(0.18); }
+  to { transform: scaleX(0.15); }
 }
 
-/* Shake effect for invalid moves */
+/* Chess Piece Hover & Selected Bounce */
+.arcade-chess-piece {
+  display: block;
+  width: 92%;
+  height: 92%;
+  transition: transform 0.15s ease-out;
+}
+
+.arcade-chess-piece:hover {
+  transform: scale(1.12) rotate(-5deg);
+}
+
+.arcade-chess-bounce {
+  animation: arcade-bounce 0.5s infinite alternate ease-in-out;
+}
+
+@keyframes arcade-bounce {
+  to {
+    transform: translateY(-8px) rotate(10deg) scale(1.15);
+  }
+}
+
+/* King in check & Board shake on capture */
 .arcade-shake {
-  animation: arcade-shake-anim 0.35s ease-in-out;
+  animation: arcade-shake 0.3s ease-in-out;
 }
 
-@keyframes arcade-shake-anim {
-  20%, 60% { transform: translateX(-6px); }
-  40%, 80% { transform: translateX(6px); }
+.arcade-board-shake {
+  animation: arcade-shake 0.3s ease-in-out 2;
 }
 
-/* Speech bubble on chess capture */
-.arcade-speech-bubble {
-  position: absolute;
-  background: #ffffff;
-  color: #2b2140;
-  border: 3px solid #2b2140;
-  border-radius: 16px;
-  padding: 6px 12px;
-  font-weight: 800;
-  font-size: 0.85rem;
-  max-width: 200px;
-  text-align: center;
-  pointer-events: none;
-  z-index: 25;
-  box-shadow: 3px 3px 0 #2b2140;
-  animation: arcade-bubble-pop 2s forwards ease;
+@keyframes arcade-shake {
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
 }
 
-.arcade-speech-bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -12px;
-  margin-left: -6px;
-  border: 6px solid transparent;
-  border-top-color: #2b2140;
+/* Chess piece movement transition animation */
+@keyframes arcade-piece-move {
+  0% {
+    transform: translate(var(--move-dx, 0px), var(--move-dy, 0px)) scale(1.12) rotate(-5deg);
+    z-index: 30;
+  }
+  60% {
+    transform: translate(0, 0) scale(1.06) rotate(3deg);
+    z-index: 30;
+  }
+  80% {
+    transform: translate(0, 0) scale(0.96, 1.04) rotate(-1deg);
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
 }
 
-@keyframes arcade-bubble-pop {
-  0% { transform: scale(0); opacity: 0; }
-  15% { transform: scale(1.1); opacity: 1; }
-  25%, 80% { transform: scale(1); opacity: 1; }
-  100% { transform: translateY(-12px) scale(0.9); opacity: 0; }
+.arcade-piece-moving {
+  animation: arcade-piece-move 0.32s cubic-bezier(0.25, 1, 0.5, 1);
+  will-change: transform;
+}
+
+/* Legal Move Indicator Bob */
+.arcade-move-dot {
+  animation: arcade-bob 1s infinite ease-in-out;
 }
 
 /* Ghost capture flyaway */
 .arcade-ghost {
   position: absolute;
   pointer-events: none;
-  z-index: 20;
-  animation: arcade-yeet 1.4s ease-in forwards;
+  z-index: 25;
+  animation: arcade-yeet 1.6s ease-in forwards;
 }
 
 @keyframes arcade-yeet {
-  0% { transform: scale(1); }
-  20% { transform: scale(1.3, 0.7); }
+  0% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.4, 0.6);
+  }
   100% {
-    transform: translateY(-80px) rotate(360deg) scale(0.1);
+    transform: translate(var(--dx, 50px), -70vh) rotate(900deg) scale(0.2);
     opacity: 0;
   }
 }
+
 
 

@@ -4,7 +4,6 @@ import type { GameSession, ChessState } from '../../../lib/games/types';
 import { getLegalMovesForSquare, isPromotionMove } from '../../../lib/games/engines/chessEngine';
 import {
   GoofyChessPiece,
-  CHESS_VICTIM_LINES,
 } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 
@@ -30,8 +29,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [legalMoves, setLegalMoves] = useState<Array<{ from: string; to: string }>>([]);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
-  const [capturedBubble, setCapturedBubble] = useState<{ text: string; square: string } | null>(null);
-  const [ghostPiece, setGhostPiece] = useState<{ type: string; isWhite: boolean; square: string } | null>(null);
+  const [ghostPiece, setGhostPiece] = useState<{
+    type: string;
+    isWhite: boolean;
+    square: string;
+    dx: number;
+  } | null>(null);
+  const [boardShaking, setBoardShaking] = useState(false);
   const [moving, setMoving] = useState(false);
 
   const state = session.state as ChessState;
@@ -91,17 +95,21 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLegalMoves([]);
     setPendingPromotion(null);
 
-    // Check if target has a piece to trigger funny capture bubble & ghost flyaway
+    // Check if target has a piece to trigger ghost flyaway & board shake
     const targetPiece = chess.get(to as any);
     if (targetPiece) {
-      const victimLines = CHESS_VICTIM_LINES[targetPiece.type.toUpperCase()] || ['Oof!'];
-      const randomLine = victimLines[Math.floor(Math.random() * victimLines.length)];
-      setCapturedBubble({ text: randomLine, square: to });
-      setGhostPiece({ type: targetPiece.type, isWhite: targetPiece.color === 'w', square: to });
+      const dx = Math.random() * 240 - 120;
+      setGhostPiece({
+        type: targetPiece.type,
+        isWhite: targetPiece.color === 'w',
+        square: to,
+        dx,
+      });
+      setBoardShaking(true);
+      setTimeout(() => setBoardShaking(false), 600);
       setTimeout(() => {
-        setCapturedBubble(null);
         setGhostPiece(null);
-      }, 2000);
+      }, 1600);
     }
 
     try {
@@ -170,14 +178,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       </div>
 
       {/* 8x8 Chessboard - Substantially Larger on Desktop while Covering Most Phone Screen */}
-      <div className="relative p-1 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[580px] min-w-0">
-        {/* Floating Capture Speech Bubble */}
-        {capturedBubble && (
-          <div className="arcade-speech-bubble top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-            {capturedBubble.text}
-          </div>
-        )}
-
+      <div
+        className={`relative p-1 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[580px] min-w-0 ${
+          boardShaking ? 'arcade-board-shake' : ''
+        }`}
+      >
         <div className="grid grid-cols-8 grid-rows-8 w-full h-full border-2 border-[var(--arcade-ink)] rounded-lg overflow-hidden relative">
           {rows.map((r) =>
             cols.map((c) => {
@@ -192,6 +197,29 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 state.isCheck && piece && piece.type === 'k' && piece.color === turn;
               const hasGhost = ghostPiece && ghostPiece.square === squareName;
 
+              // Compute movement delta if this square is the destination of the last move
+              const isLastMoveDestination = state.lastMove?.to === squareName;
+              let moveDx = '0%';
+              let moveDy = '0%';
+              if (isLastMoveDestination && state.lastMove) {
+                const fromFile = state.lastMove.from.charCodeAt(0) - 97;
+                const fromRank = parseInt(state.lastMove.from[1], 10) - 1;
+                const toFile = state.lastMove.to.charCodeAt(0) - 97;
+                const toRank = parseInt(state.lastMove.to[1], 10) - 1;
+
+                const fromColIdx = isFlipped ? 7 - fromFile : fromFile;
+                const fromRowIdx = isFlipped ? fromRank : 7 - fromRank;
+
+                const toColIdx = isFlipped ? 7 - toFile : toFile;
+                const toRowIdx = isFlipped ? toRank : 7 - toRank;
+
+                const deltaCol = fromColIdx - toColIdx;
+                const deltaRow = fromRowIdx - toRowIdx;
+
+                moveDx = `${deltaCol * 100}%`;
+                moveDy = `${deltaRow * 100}%`;
+              }
+
               return (
                 <div
                   key={squareName}
@@ -199,25 +227,40 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   className={`aspect-square relative flex items-center justify-center cursor-pointer transition-colors ${
                     isDark ? 'bg-[var(--arcade-s2)]' : 'bg-[var(--arcade-s1)]'
                   } ${isSelected ? '!bg-[#ffe066] ring-2 ring-yellow-500 z-10' : ''} ${
-                    isCheckKing ? '!bg-[#ff5555] animate-pulse arcade-shake' : ''
+                    isCheckKing ? '!bg-[#ff5555] animate-pulse' : ''
                   }`}
                 >
                   {piece && (
-                    <div className="w-[90%] h-[90%] transition-transform hover:scale-110 active:scale-95">
+                    <div
+                      key={`piece-${piece.color}-${piece.type}-${squareName}-${state.lastMove?.san || ''}`}
+                      style={
+                        isLastMoveDestination
+                          ? ({ '--move-dx': moveDx, '--move-dy': moveDy } as React.CSSProperties)
+                          : undefined
+                      }
+                      className={`arcade-chess-piece ${
+                        isLastMoveDestination ? 'arcade-piece-moving' : ''
+                      } ${isSelected ? 'arcade-chess-bounce' : ''} ${
+                        isCheckKing ? 'arcade-shake' : ''
+                      }`}
+                    >
                       <GoofyChessPiece type={piece.type} isWhite={piece.color === 'w'} />
                     </div>
                   )}
 
                   {/* Ghost Piece Flyaway on Capture */}
                   {hasGhost && (
-                    <div className="arcade-ghost w-[80%] h-[80%]">
+                    <div
+                      className="arcade-ghost w-[85%] h-[85%]"
+                      style={{ '--dx': `${ghostPiece.dx}px` } as React.CSSProperties}
+                    >
                       <GoofyChessPiece type={ghostPiece.type} isWhite={ghostPiece.isWhite} />
                     </div>
                   )}
 
                   {/* Legal move indicator dot */}
                   {isLegal && (
-                    <div className="absolute w-3.5 h-3.5 sm:w-4 sm:h-4 bg-[#2bb5d4] border border-[var(--arcade-ink)] rounded-full opacity-90 shadow pointer-events-none" />
+                    <div className="absolute w-3.5 h-3.5 sm:w-4 sm:h-4 bg-[#2bb5d4] border border-[var(--arcade-ink)] rounded-full opacity-90 shadow pointer-events-none arcade-move-dot" />
                   )}
                 </div>
               );

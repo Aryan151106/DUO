@@ -7,7 +7,7 @@ import { ConnectFourBoard } from './ConnectFourBoard';
 import { ChessBoard } from './ChessBoard';
 import { DoodleBoard } from './DoodleBoard';
 import { GameStatsModal } from './GameStatsModal';
-import { FLOATING_EMOJIS, MASCOT_JOKES } from '../../../lib/games/arcadeAssets';
+import { FLOATING_EMOJIS } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 import '../../../lib/games/arcadeTheme.css';
 
@@ -59,7 +59,6 @@ export const GamesArea: React.FC = () => {
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [selectedMode, setSelectedMode] = useState<GameMode>('online');
   const [isMascotWobbling, setIsMascotWobbling] = useState(false);
-  const [mascotQuoteIndex, setMascotQuoteIndex] = useState(0);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEditingNames, setIsEditingNames] = useState(false);
 
@@ -72,7 +71,6 @@ export const GamesArea: React.FC = () => {
 
   const handleMascotPoke = () => {
     setIsMascotWobbling(true);
-    setMascotQuoteIndex((prev) => (prev + 1) % MASCOT_JOKES.length);
     setTimeout(() => setIsMascotWobbling(false), 500);
   };
 
@@ -87,8 +85,6 @@ export const GamesArea: React.FC = () => {
     activeSessionHook.setLocalPlayerNamesConfig(p1Input.trim() || 'Player 1', p2Input.trim() || 'Player 2');
     setIsEditingNames(false);
   };
-
-  const currentJoke = MASCOT_JOKES[mascotQuoteIndex % MASCOT_JOKES.length];
 
   return (
     <div
@@ -132,10 +128,6 @@ export const GamesArea: React.FC = () => {
               <span>Silly Arcade</span>
               <span className="text-xl sm:text-2xl">🎮</span>
             </h2>
-
-            <p className="font-extrabold text-xs sm:text-sm text-[var(--arcade-ink)] opacity-90 transition-all min-h-[1.5em] max-w-md mx-auto">
-              "{currentJoke}"
-            </p>
 
             <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
               <button

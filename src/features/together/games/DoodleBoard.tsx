@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { GameSession, DoodleState, DoodleStroke, DoodleStrokeChunk } from '../../../lib/games/types';
-import { DOODLE_JOKES } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
 
 interface DoodleBoardProps {
@@ -221,8 +220,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
       setGuessFeedback(`🎉 Correct! It was ${res.word?.toUpperCase()}!`);
     } else {
       setShakingCanvas(true);
-      const joke = DOODLE_JOKES[Math.floor(Math.random() * DOODLE_JOKES.length)];
-      setGuessFeedback(`“${guessText}”? Nope! 🎨 ${joke}`);
+      setGuessFeedback(`“${guessText}” is incorrect`);
       setTimeout(() => setShakingCanvas(false), 500);
     }
     setGuessInput('');
