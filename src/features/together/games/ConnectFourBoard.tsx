@@ -194,7 +194,7 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         <button
           type="button"
           onClick={onLeave}
-          className="arcade-btn text-xs sm:text-sm py-2 px-4 bg-white dark:bg-gray-800"
+          className="arcade-btn arcade-btn-secondary text-xs sm:text-sm py-2 px-4"
         >
           <GoogleIcon name="arrow_back" size={16} />
           <span>Exit Game</span>

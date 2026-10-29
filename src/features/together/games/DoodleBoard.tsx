@@ -328,7 +328,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
                 sfx('slide');
                 onClear();
               }}
-              className="arcade-btn py-1.5 px-3.5 text-xs sm:text-sm bg-white"
+              className="arcade-btn arcade-btn-secondary py-1.5 px-3.5 text-xs sm:text-sm"
             >
               <GoogleIcon name="delete" size={16} />
               <span>Clear</span>
@@ -410,7 +410,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
         <button
           type="button"
           onClick={onLeave}
-          className="arcade-btn text-xs sm:text-sm py-2 px-4 bg-white dark:bg-gray-800"
+          className="arcade-btn arcade-btn-secondary text-xs sm:text-sm py-2 px-4"
         >
           <GoogleIcon name="arrow_back" size={16} />
           <span>Exit Game</span>

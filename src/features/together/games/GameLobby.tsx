@@ -101,7 +101,7 @@ export const GameLobby: React.FC<GameLobbyProps> = ({
         <button
           type="button"
           onClick={onLeave}
-          className="arcade-btn py-2 px-4 text-xs bg-white w-full sm:w-auto"
+          className="arcade-btn arcade-btn-secondary py-2 px-4 text-xs w-full sm:w-auto"
         >
           <span>All Games</span>
         </button>
@@ -258,7 +258,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-base sm:text-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'X'
                     ? 'bg-[#ff5d8f] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>❌</span>
@@ -272,7 +272,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-base sm:text-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'O'
                     ? 'bg-[#2bb5d4] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>⭕</span>
@@ -334,7 +334,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'w'
                     ? 'bg-[#fff4d9] text-[#2b2140] shadow-[2px_2px_0_var(--arcade-ink)] scale-102 ring-2 ring-[#ff5d8f]'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>⚪</span>
@@ -348,7 +348,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'b'
                     ? 'bg-[#6a4fb0] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>⚫</span>
@@ -375,7 +375,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'drawer'
                     ? 'bg-[#ff5d8f] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>🎨</span>
@@ -389,7 +389,7 @@ const PlayerSetupPanel: React.FC<PlayerSetupPanelProps> = ({
                 className={`py-2 px-3 rounded-xl border-2 border-[var(--arcade-ink)] font-black text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer ${
                   choice.role === 'guesser'
                     ? 'bg-[#2bb5d4] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                    : 'bg-white text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
+                    : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] hover:bg-[var(--arcade-bg)]'
                 }`}
               >
                 <span>🧐</span>

@@ -77,7 +77,7 @@ export const GameStatsModal: React.FC<GameStatsModalProps> = ({ isOpen, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full border-2 border-[#2b2140] bg-white flex items-center justify-center font-bold text-lg hover:scale-110 active:scale-95 cursor-pointer"
+            className="w-8 h-8 rounded-full border-2 border-[var(--arcade-ink)] bg-[var(--arcade-card)] text-[var(--arcade-ink)] flex items-center justify-center font-bold text-lg hover:scale-110 active:scale-95 cursor-pointer"
           >
             ✕
           </button>
@@ -91,7 +91,7 @@ export const GameStatsModal: React.FC<GameStatsModalProps> = ({ isOpen, onClose 
             className={`py-2 rounded-xl font-extrabold text-sm border-2 border-[var(--arcade-ink)] flex items-center justify-center gap-1.5 transition-transform ${
               activeTab === 'online'
                 ? 'bg-[#2bb5d4] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                : 'bg-white text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
+                : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
             }`}
           >
             <span>🌐 Online Duo Records</span>
@@ -102,7 +102,7 @@ export const GameStatsModal: React.FC<GameStatsModalProps> = ({ isOpen, onClose 
             className={`py-2 rounded-xl font-extrabold text-sm border-2 border-[var(--arcade-ink)] flex items-center justify-center gap-1.5 transition-transform ${
               activeTab === 'local'
                 ? 'bg-[#ff5d8f] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
-                : 'bg-white text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
+                : 'bg-[var(--arcade-card)] text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
             }`}
           >
             <span>📱 Local Pass-and-Play</span>

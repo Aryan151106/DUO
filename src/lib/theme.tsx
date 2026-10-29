@@ -585,6 +585,12 @@ export function applyThemeVariables(colors: ThemeColors, theme: ThemeName, mode:
   root.setAttribute('data-app-theme', theme);
   root.setAttribute('data-mode', mode);
 
+  if (mode === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+
   const visualColors = colors;
 
   root.style.setProperty('--bg', visualColors.bg);

@@ -113,7 +113,7 @@ export const GamesArea: React.FC = () => {
   return (
     <div
       onPointerDown={handlePointerDown}
-      className={`silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto ${
+      className={`silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto bg-[var(--arcade-bg)] text-[var(--arcade-ink)] rounded-3xl transition-colors duration-200 ${
         selectedGame ? 'px-1 sm:px-4' : 'px-2.5 sm:px-4'
       } py-1.5 sm:py-4 relative min-h-[600px] min-w-0`}
     >
@@ -167,7 +167,7 @@ export const GamesArea: React.FC = () => {
               <button
                 type="button"
                 onClick={handleToggleMute}
-                className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-3 bg-white"
+                className="arcade-btn arcade-btn-pill arcade-btn-secondary text-xs sm:text-sm py-1.5 px-3"
                 title={isMuted ? 'Unmute Sound FX' : 'Mute Sound FX'}
               >
                 <span>{isMuted ? '🔇 Muted' : '🔊 Sound On'}</span>
@@ -177,7 +177,7 @@ export const GamesArea: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleOpenEditNames}
-                  className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-4 bg-white"
+                  className="arcade-btn arcade-btn-pill arcade-btn-secondary text-xs sm:text-sm py-1.5 px-4"
                 >
                   <GoogleIcon name="edit" size={16} />
                   <span>Player Names</span>
@@ -221,7 +221,7 @@ export const GamesArea: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleToggleMute}
-                  className="arcade-btn py-1 px-2.5 text-xs bg-white"
+                  className="arcade-btn arcade-btn-secondary py-1 px-2.5 text-xs"
                   title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
                 >
                   {isMuted ? '🔇' : '🔊'}
@@ -229,7 +229,7 @@ export const GamesArea: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsStatsOpen(true)}
-                  className="arcade-btn py-1 px-2.5 text-xs bg-white"
+                  className="arcade-btn arcade-btn-secondary py-1 px-2.5 text-xs"
                   title="View Streaks"
                 >
                   🏆
@@ -240,7 +240,7 @@ export const GamesArea: React.FC = () => {
                     sfx('boing');
                     setSelectedGame(null);
                   }}
-                  className="arcade-btn py-1 px-3 text-xs bg-white"
+                  className="arcade-btn arcade-btn-secondary py-1 px-3 text-xs"
                 >
                   All Games
                 </button>
@@ -471,7 +471,7 @@ export const GamesArea: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <form
             onSubmit={handleSaveEditNames}
-            className="arcade-card p-5 max-w-sm w-full space-y-4 bg-white"
+            className="arcade-card p-5 max-w-sm w-full space-y-4"
           >
             <h3 className="font-black text-lg text-[var(--arcade-ink)]">Edit Player Names</h3>
             <div className="space-y-3">
@@ -484,7 +484,7 @@ export const GamesArea: React.FC = () => {
                   value={p1Input}
                   onChange={(e) => setP1Input(e.target.value)}
                   placeholder="Player 1"
-                  className="w-full mt-1 p-2 bg-[var(--arcade-bg)] border-2 border-[var(--arcade-ink)] rounded-xl font-bold text-sm"
+                  className="w-full mt-1 p-2 bg-[var(--arcade-bg)] text-[var(--arcade-ink)] border-2 border-[var(--arcade-ink)] rounded-xl font-bold text-sm"
                   maxLength={20}
                 />
               </div>
@@ -498,7 +498,7 @@ export const GamesArea: React.FC = () => {
                   value={p2Input}
                   onChange={(e) => setP2Input(e.target.value)}
                   placeholder="Player 2"
-                  className="w-full mt-1 p-2 bg-[var(--arcade-bg)] border-2 border-[var(--arcade-ink)] rounded-xl font-bold text-sm"
+                  className="w-full mt-1 p-2 bg-[var(--arcade-bg)] text-[var(--arcade-ink)] border-2 border-[var(--arcade-ink)] rounded-xl font-bold text-sm"
                   maxLength={20}
                 />
               </div>
@@ -508,7 +508,7 @@ export const GamesArea: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsEditingNames(false)}
-                className="arcade-btn py-1.5 px-4 text-xs bg-gray-200"
+                className="arcade-btn arcade-btn-secondary py-1.5 px-4 text-xs"
               >
                 Cancel
               </button>

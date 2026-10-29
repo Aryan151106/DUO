@@ -1,5 +1,28 @@
 /* Scoped Arcade Styling - Preserves Silly Arcade Aesthetics without global leakage */
 
+:root {
+  --arcade-bg: #fff3d6;
+  --arcade-ink: #2b2140;
+  --arcade-card: #ffffff;
+  --arcade-a: #ff5d8f;
+  --arcade-b: #2bb5d4;
+  --arcade-c: #ffc233;
+  --arcade-s1: #f5e3bf;
+  --arcade-s2: #b98655;
+}
+
+:root[data-mode='dark'],
+:root[data-theme='dark'],
+:root.dark,
+[data-mode='dark'],
+.dark {
+  --arcade-bg: #1c1632;
+  --arcade-ink: #fdf3ff;
+  --arcade-card: #2e2450;
+  --arcade-s1: #d9c7a0;
+  --arcade-s2: #7a5a3e;
+}
+
 .silly-arcade {
   --arcade-bg: #fff3d6;
   --arcade-ink: #2b2140;
@@ -10,12 +33,20 @@
   --arcade-s1: #f5e3bf;
   --arcade-s2: #b98655;
   color: var(--arcade-ink);
+  background-color: var(--arcade-bg);
+  border-radius: 24px;
   font-family: 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', -apple-system, sans-serif;
   user-select: none;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+:root[data-mode='dark'] .silly-arcade,
 :root[data-theme='dark'] .silly-arcade,
-.dark .silly-arcade {
+:root.dark .silly-arcade,
+[data-mode='dark'] .silly-arcade,
+.dark .silly-arcade,
+html.dark .silly-arcade,
+body.dark .silly-arcade {
   --arcade-bg: #1c1632;
   --arcade-ink: #fdf3ff;
   --arcade-card: #2e2450;
@@ -25,10 +56,11 @@
 
 .arcade-card {
   background: var(--arcade-card);
+  color: var(--arcade-ink);
   border: 3px solid var(--arcade-ink);
   border-radius: 24px;
   box-shadow: 5px 5px 0 var(--arcade-ink);
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
 
 .arcade-btn {
@@ -41,7 +73,7 @@
   padding: 10px 16px;
   cursor: pointer;
   box-shadow: 3px 3px 0 var(--arcade-ink);
-  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s, box-shadow 0.15s, color 0.15s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -74,6 +106,37 @@
 .arcade-btn-blue {
   background: var(--arcade-b);
   color: #ffffff;
+}
+
+.arcade-btn-secondary {
+  background: var(--arcade-card);
+  color: var(--arcade-ink);
+  border-color: var(--arcade-ink);
+}
+
+.arcade-btn-secondary:hover:not(:disabled) {
+  background: var(--arcade-bg);
+}
+
+/* Ensure secondary buttons and buttons with white background adapt with high contrast in dark mode */
+:root[data-mode='dark'] .arcade-btn-secondary,
+.dark .arcade-btn-secondary,
+:root[data-mode='dark'] .arcade-btn.bg-white,
+.dark .arcade-btn.bg-white,
+:root[data-mode='dark'] .arcade-btn[class*='dark:bg-'],
+.dark .arcade-btn[class*='dark:bg-'] {
+  background: var(--arcade-card) !important;
+  color: var(--arcade-ink) !important;
+  border-color: var(--arcade-ink) !important;
+}
+
+:root[data-mode='dark'] .arcade-btn-secondary:hover:not(:disabled),
+.dark .arcade-btn-secondary:hover:not(:disabled),
+:root[data-mode='dark'] .arcade-btn.bg-white:hover:not(:disabled),
+.dark .arcade-btn.bg-white:hover:not(:disabled),
+:root[data-mode='dark'] .arcade-btn[class*='dark:bg-']:hover:not(:disabled),
+.dark .arcade-btn[class*='dark:bg-']:hover:not(:disabled) {
+  background: var(--arcade-bg) !important;
 }
 
 .arcade-btn-pill {
