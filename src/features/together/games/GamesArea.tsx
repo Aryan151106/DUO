@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import type { GameType, GameMode } from '../../../lib/games/types';
+import type { GameType } from '../../../lib/games/types';
 import { useGameSession } from '../../../lib/games/useGameSession';
+import { useActiveGameStore } from '../../../lib/games/gameStore';
+import { GameChatPanel } from './GameChatPanel';
 import { GameLobby } from './GameLobby';
 import { TicTacToeBoard } from './TicTacToeBoard';
 import { ConnectFourBoard } from './ConnectFourBoard';
@@ -57,21 +59,47 @@ const GAMES_LIST: GameCardMeta[] = [
 ];
 
 export const GamesArea: React.FC = () => {
-  const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
-  const [selectedMode, setSelectedMode] = useState<GameMode>('online');
+  const {
+    activeGameType,
+    activeGameMode,
+    pausedGameType,
+    setActiveGame,
+    setActiveGameMode,
+    clearActiveGame,
+  } = useActiveGameStore();
+
   const [isMascotWobbling, setIsMascotWobbling] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEditingNames, setIsEditingNames] = useState(false);
   const [isMuted, setIsMuted] = useState(isArcadeMuted());
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // Local names input state
   const [p1Input, setP1Input] = useState('');
   const [p2Input, setP2Input] = useState('');
 
-  // Active game session hook for currently selected game
-  const activeSessionHook = useGameSession(selectedGame || 'tic-tac-toe', selectedMode);
+  // Active game session hook for currently selected game (does NOT connect if activeGameType is null)
+  const activeSessionHook = useGameSession(activeGameType, activeGameMode);
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    // Check if target is an interactive or canvas/input/modal element
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'CANVAS' ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('textarea') ||
+        target.closest('canvas') ||
+        target.closest('.arcade-btn') ||
+        target.closest('[role="dialog"]') ||
+        target.closest('.arcade-card'))
+    ) {
+      return;
+    }
+
     // Generate playful sparks matching user's HTML
     const emojis = ['✨', '💥', '⭐', '🎈'];
     for (let i = 0; i < 6; i++) {
@@ -110,11 +138,32 @@ export const GamesArea: React.FC = () => {
     setIsEditingNames(false);
   };
 
+  const handleRequestLeave = () => {
+    if (activeSessionHook.session?.status === 'active' && activeGameMode === 'online') {
+      setShowLeaveConfirm(true);
+    } else {
+      handleConfirmLeave();
+    }
+  };
+
+  const handleConfirmLeave = () => {
+    sfx('boing');
+    activeSessionHook.leaveGame();
+    clearActiveGame();
+    setShowLeaveConfirm(false);
+  };
+
+  const handleBackToArcade = () => {
+    sfx('boing');
+    // Non-destructive back to arcade lobby
+    setActiveGame(null);
+  };
+
   return (
     <div
       onPointerDown={handlePointerDown}
       className={`silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto bg-[var(--arcade-bg)] text-[var(--arcade-ink)] rounded-3xl transition-colors duration-200 ${
-        selectedGame ? 'px-1 sm:px-4' : 'px-2.5 sm:px-4'
+        activeGameType ? 'px-1 sm:px-4' : 'px-2.5 sm:px-4'
       } py-1.5 sm:py-4 relative min-h-[600px] min-w-0`}
     >
       {/* Floating game decorations */}
@@ -137,7 +186,7 @@ export const GamesArea: React.FC = () => {
       {/* Main Container */}
       <div className="relative z-10 space-y-4 sm:space-y-6">
         {/* Arcade Mascot & Title Banner */}
-        {!selectedGame ? (
+        {!activeGameType ? (
           <div className="text-center space-y-2">
             <div
               onClick={handleMascotPoke}
@@ -173,7 +222,7 @@ export const GamesArea: React.FC = () => {
                 <span>{isMuted ? '🔇 Muted' : '🔊 Sound On'}</span>
               </button>
 
-              {selectedMode === 'local' && (
+              {activeGameMode === 'local' && (
                 <button
                   type="button"
                   onClick={handleOpenEditNames}
@@ -188,20 +237,20 @@ export const GamesArea: React.FC = () => {
         ) : null}
 
         {/* ── Active Game View (Substantially Larger on Desktop & Phone) ── */}
-        {selectedGame ? (
-          <div className="arcade-card px-1 py-2 sm:p-6 w-full max-w-full sm:max-w-3xl lg:max-w-4xl mx-auto space-y-2.5 sm:space-y-4 shadow-[3px_3px_0_var(--arcade-ink)] sm:shadow-[7px_7px_0_var(--arcade-ink)] min-w-0">
-            {/* Top Bar with Mode Indicator & Exit */}
-            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-2 px-1 gap-1.5 flex-wrap sm:flex-nowrap min-w-0">
+        {activeGameType ? (
+          <div className="arcade-card px-1 py-2 sm:p-5 w-full max-w-full lg:max-w-5xl xl:max-w-6xl mx-auto space-y-3 sm:space-y-4 shadow-[3px_3px_0_var(--arcade-ink)] sm:shadow-[7px_7px_0_var(--arcade-ink)] min-w-0">
+            {/* Top Bar with Mode Indicator & Actions */}
+            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-2 px-1 gap-1.5 flex-wrap min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-2xl sm:text-3xl">
-                  {GAMES_LIST.find((g) => g.type === selectedGame)?.icon}
+                  {GAMES_LIST.find((g) => g.type === activeGameType)?.icon}
                 </span>
                 <div>
                   <h3 className="font-black text-base sm:text-xl text-[var(--arcade-ink)] leading-tight">
-                    {GAMES_LIST.find((g) => g.type === selectedGame)?.title}
+                    {GAMES_LIST.find((g) => g.type === activeGameType)?.title}
                   </h3>
                   <span className="text-[11px] sm:text-xs font-bold text-[var(--arcade-ink)] opacity-75">
-                    {selectedMode === 'online' ? '🌐 Online Mode' : '📱 Local Pass-and-Play'}
+                    {activeGameMode === 'online' ? '🌐 Online Mode' : '📱 Local Pass-and-Play'}
                   </span>
                 </div>
               </div>
@@ -217,7 +266,7 @@ export const GamesArea: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
                   onClick={handleToggleMute}
@@ -236,19 +285,34 @@ export const GamesArea: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    sfx('boing');
-                    setSelectedGame(null);
-                  }}
+                  onClick={handleBackToArcade}
                   className="arcade-btn arcade-btn-secondary py-1 px-3 text-xs"
+                  title="Return to Arcade hub without leaving or resigning match"
                 >
-                  All Games
+                  <GoogleIcon name="arrow_back" size={14} />
+                  <span>Back to games</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRequestLeave}
+                  className="arcade-btn arcade-btn-pink py-1 px-3 text-xs"
+                  title={
+                    activeGameMode === 'online' && activeSessionHook.session?.status === 'active'
+                      ? 'Resign from match'
+                      : 'Leave match'
+                  }
+                >
+                  <span>
+                    {activeGameMode === 'online' && activeSessionHook.session?.status === 'active'
+                      ? 'Resign 🏳️'
+                      : 'Leave Game ✕'}
+                  </span>
                 </button>
               </div>
             </div>
 
             {/* Waiting / Connecting State for Online */}
-            {selectedMode === 'online' && activeSessionHook.status === 'connecting' && (
+            {activeGameMode === 'online' && activeSessionHook.status === 'connecting' && (
               <div className="py-12 text-center space-y-3">
                 <div className="text-4xl animate-bounce">⏳</div>
                 <h4 className="font-extrabold text-lg text-[var(--arcade-ink)]">
@@ -269,7 +333,7 @@ export const GamesArea: React.FC = () => {
                 </h4>
                 <button
                   type="button"
-                  onClick={() => setSelectedGame(null)}
+                  onClick={handleConfirmLeave}
                   className="arcade-btn text-xs py-1.5 px-4"
                 >
                   Return to Games Hub
@@ -279,14 +343,14 @@ export const GamesArea: React.FC = () => {
 
             {/* Partner Abandoned State */}
             {activeSessionHook.status === 'abandoned' && (
-              <div className="py-8 text-center space-y-3 bg-amber-100 rounded-2xl border-2 border-amber-500 p-4">
+              <div className="py-8 text-center space-y-3 bg-amber-100 dark:bg-amber-950/40 rounded-2xl border-2 border-amber-500 p-4">
                 <div className="text-3xl">👋</div>
-                <h4 className="font-extrabold text-base text-amber-900">
+                <h4 className="font-extrabold text-base text-amber-900 dark:text-amber-200">
                   Your partner left the match.
                 </h4>
                 <button
                   type="button"
-                  onClick={() => setSelectedGame(null)}
+                  onClick={handleConfirmLeave}
                   className="arcade-btn text-xs py-1.5 px-4"
                 >
                   Return to Games Hub
@@ -294,82 +358,135 @@ export const GamesArea: React.FC = () => {
               </div>
             )}
 
-            {/* ── PRE-GAME LOBBY VIEW (Setup / Choice Phase) ── */}
-            {activeSessionHook.status === 'setup' && activeSessionHook.session && (
-              <GameLobby
-                session={activeSessionHook.session}
-                isOnline={selectedMode === 'online'}
-                myUid={activeSessionHook.myUid}
-                onSelectChoice={activeSessionHook.selectChoice}
-                onConfirmReady={activeSessionHook.confirmReady}
-                onLeave={() => setSelectedGame(null)}
-              />
-            )}
+            {/* ── MAIN PLAYING AREA & LIVE GAME CHAT (Side-by-Side on Desktop, Drawer on Phone) ── */}
+            <div className="flex flex-col lg:flex-row items-center lg:items-start justify-center gap-4 sm:gap-6 w-full min-w-0">
+              <div className="flex-1 w-full flex flex-col items-center min-w-0">
+                {/* ── PRE-GAME LOBBY VIEW (Setup / Choice Phase) ── */}
+                {activeSessionHook.status === 'setup' && activeSessionHook.session && (
+                  <GameLobby
+                    session={activeSessionHook.session}
+                    isOnline={activeGameMode === 'online'}
+                    myUid={activeSessionHook.myUid}
+                    onSelectChoice={activeSessionHook.selectChoice}
+                    onConfirmReady={activeSessionHook.confirmReady}
+                    onLeave={handleRequestLeave}
+                  />
+                )}
 
-            {/* ── ACTIVE / FINISHED MATCH VIEW ── */}
-            {(activeSessionHook.status === 'active' || activeSessionHook.status === 'finished') &&
-              activeSessionHook.session && (
-                <>
-                  {selectedGame === 'tic-tac-toe' && (
-                    <TicTacToeBoard
-                      session={activeSessionHook.session}
-                      isMyTurn={activeSessionHook.isMyTurn}
-                      myRole={activeSessionHook.myRole}
-                      onMove={activeSessionHook.makeMove}
-                      onRematch={activeSessionHook.requestRematch}
-                      onLeave={() => setSelectedGame(null)}
-                      rematchRequested={activeSessionHook.rematchRequested}
-                    />
-                  )}
+                {/* ── ACTIVE / FINISHED MATCH VIEW ── */}
+                {(activeSessionHook.status === 'active' || activeSessionHook.status === 'finished') &&
+                  activeSessionHook.session && (
+                    <>
+                      {activeGameType === 'tic-tac-toe' && (
+                        <TicTacToeBoard
+                          session={activeSessionHook.session}
+                          isMyTurn={activeSessionHook.isMyTurn}
+                          myRole={activeSessionHook.myRole}
+                          onMove={activeSessionHook.makeMove}
+                          onRematch={activeSessionHook.requestRematch}
+                          onLeave={handleRequestLeave}
+                          rematchRequested={activeSessionHook.rematchRequested}
+                        />
+                      )}
 
-                  {selectedGame === 'connect-four' && (
-                    <ConnectFourBoard
-                      session={activeSessionHook.session}
-                      isMyTurn={activeSessionHook.isMyTurn}
-                      myRole={activeSessionHook.myRole}
-                      onMove={activeSessionHook.makeMove}
-                      onRematch={activeSessionHook.requestRematch}
-                      onLeave={() => setSelectedGame(null)}
-                      rematchRequested={activeSessionHook.rematchRequested}
-                    />
-                  )}
+                      {activeGameType === 'connect-four' && (
+                        <ConnectFourBoard
+                          session={activeSessionHook.session}
+                          isMyTurn={activeSessionHook.isMyTurn}
+                          myRole={activeSessionHook.myRole}
+                          onMove={activeSessionHook.makeMove}
+                          onRematch={activeSessionHook.requestRematch}
+                          onLeave={handleRequestLeave}
+                          rematchRequested={activeSessionHook.rematchRequested}
+                        />
+                      )}
 
-                  {selectedGame === 'chess' && (
-                    <ChessBoard
-                      session={activeSessionHook.session}
-                      isMyTurn={activeSessionHook.isMyTurn}
-                      myRole={activeSessionHook.myRole}
-                      onMove={activeSessionHook.makeMove}
-                      onRematch={activeSessionHook.requestRematch}
-                      onLeave={() => setSelectedGame(null)}
-                      rematchRequested={activeSessionHook.rematchRequested}
-                    />
-                  )}
+                      {activeGameType === 'chess' && (
+                        <ChessBoard
+                          session={activeSessionHook.session}
+                          isMyTurn={activeSessionHook.isMyTurn}
+                          myRole={activeSessionHook.myRole}
+                          onMove={activeSessionHook.makeMove}
+                          onRematch={activeSessionHook.requestRematch}
+                          onLeave={handleRequestLeave}
+                          rematchRequested={activeSessionHook.rematchRequested}
+                        />
+                      )}
 
-                  {selectedGame === 'guess-from-doodle' && (
-                    <DoodleBoard
-                      session={activeSessionHook.session}
-                      isMyTurn={activeSessionHook.isMyTurn}
-                      myRole={activeSessionHook.myRole}
-                      secretWord={activeSessionHook.secretWord}
-                      doodleStrokes={activeSessionHook.doodleStrokes}
-                      incomingLiveChunk={activeSessionHook.incomingLiveChunk}
-                      onSendStroke={activeSessionHook.sendStroke}
-                      onSendStrokeChunk={activeSessionHook.sendStrokeChunk}
-                      onClear={activeSessionHook.clearDoodle}
-                      onRequestHint={activeSessionHook.requestHint}
-                      onSubmitGuess={activeSessionHook.submitGuess}
-                      onRematch={activeSessionHook.requestRematch}
-                      onLeave={() => setSelectedGame(null)}
-                      rematchRequested={activeSessionHook.rematchRequested}
-                    />
+                      {activeGameType === 'guess-from-doodle' && (
+                        <DoodleBoard
+                          session={activeSessionHook.session}
+                          isMyTurn={activeSessionHook.isMyTurn}
+                          myRole={activeSessionHook.myRole}
+                          secretWord={activeSessionHook.secretWord}
+                          doodleStrokes={activeSessionHook.doodleStrokes}
+                          incomingLiveChunk={activeSessionHook.incomingLiveChunk}
+                          onSendStroke={activeSessionHook.sendStroke}
+                          onSendStrokeChunk={activeSessionHook.sendStrokeChunk}
+                          onClear={activeSessionHook.clearDoodle}
+                          onRequestHint={activeSessionHook.requestHint}
+                          onSubmitGuess={activeSessionHook.submitGuess}
+                          onRematch={activeSessionHook.requestRematch}
+                          onLeave={handleRequestLeave}
+                          rematchRequested={activeSessionHook.rematchRequested}
+                        />
+                      )}
+                    </>
                   )}
-                </>
+              </div>
+
+              {/* Side-by-side In-Game Chat Panel (Docked on Desktop, Drawer on Mobile) */}
+              {activeSessionHook.session && (
+                <GameChatPanel
+                  sessionId={activeSessionHook.session.id}
+                  gameMode={activeGameMode}
+                  myUid={activeSessionHook.myUid}
+                  onSendMessage={activeSessionHook.sendChatMessage}
+                  isConnected={
+                    activeSessionHook.status !== 'error' && activeSessionHook.status !== 'connecting'
+                  }
+                />
               )}
+            </div>
           </div>
         ) : (
           /* ── Games Hub Home Screen ── */
           <div className="space-y-6">
+            {/* Active Match Paused Resume Banner */}
+            {pausedGameType && (
+              <div className="arcade-card p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 bg-[var(--arcade-card)] border-3 border-[var(--arcade-ink)] shadow-[4px_4px_0_var(--arcade-ink)]">
+                <div className="flex items-center gap-3 text-left">
+                  <span className="text-4xl p-2.5 bg-[var(--arcade-bg)] border-2 border-[var(--arcade-ink)] rounded-2xl shadow-[2px_2px_0_var(--arcade-ink)]">
+                    {GAMES_LIST.find((g) => g.type === pausedGameType)?.icon}
+                  </span>
+                  <div>
+                    <span className="text-[11px] font-black uppercase text-[#ff5d8f]">
+                      Active Match Paused
+                    </span>
+                    <h4 className="font-black text-lg sm:text-xl text-[var(--arcade-ink)]">
+                      {GAMES_LIST.find((g) => g.type === pausedGameType)?.title}
+                    </h4>
+                    <p className="text-xs font-semibold text-[var(--arcade-ink)] opacity-75">
+                      Your match and board state are waiting.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sfx('boing');
+                      setActiveGame(pausedGameType);
+                    }}
+                    className="arcade-btn arcade-btn-pink py-2 px-5 text-sm cursor-pointer"
+                  >
+                    <span>Resume Game</span>
+                    <GoogleIcon name="play_arrow" size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Mode Switcher Banner */}
             <div className="arcade-card p-4 sm:p-5 text-center space-y-3 bg-[var(--arcade-card)]">
               <h3 className="font-extrabold text-sm sm:text-base text-[var(--arcade-ink)] uppercase tracking-wider">
@@ -381,10 +498,10 @@ export const GamesArea: React.FC = () => {
                   type="button"
                   onClick={() => {
                     sfx('boing');
-                    setSelectedMode('online');
+                    setActiveGameMode('online');
                   }}
                   className={`py-2 px-3 rounded-xl font-black text-xs sm:text-sm border-2 border-[var(--arcade-ink)] transition-transform cursor-pointer ${
-                    selectedMode === 'online'
+                    activeGameMode === 'online'
                       ? 'bg-[#2bb5d4] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
                       : 'bg-transparent text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
                   }`}
@@ -395,10 +512,10 @@ export const GamesArea: React.FC = () => {
                   type="button"
                   onClick={() => {
                     sfx('boing');
-                    setSelectedMode('local');
+                    setActiveGameMode('local');
                   }}
                   className={`py-2 px-3 rounded-xl font-black text-xs sm:text-sm border-2 border-[var(--arcade-ink)] transition-transform cursor-pointer ${
-                    selectedMode === 'local'
+                    activeGameMode === 'local'
                       ? 'bg-[#ff5d8f] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
                       : 'bg-transparent text-[var(--arcade-ink)] opacity-70 hover:opacity-100'
                   }`}
@@ -408,7 +525,7 @@ export const GamesArea: React.FC = () => {
               </div>
 
               <p className="text-xs sm:text-sm font-semibold text-[var(--arcade-ink)] opacity-80 max-w-md mx-auto">
-                {selectedMode === 'online'
+                {activeGameMode === 'online'
                   ? '🌐 Play together in real time from separate devices over the internet with shared pre-game choice lobby!'
                   : `📱 Pass this device back and forth! (${activeSessionHook.localPlayers.player1Name} vs ${activeSessionHook.localPlayers.player2Name}) 100% playable offline.`}
               </p>
@@ -445,13 +562,13 @@ export const GamesArea: React.FC = () => {
 
                   <div className="pt-4 mt-2 border-t border-[var(--arcade-ink)]/20 flex items-center justify-between">
                     <span className="text-xs font-bold text-[var(--arcade-ink)] opacity-70">
-                      {selectedMode === 'online' ? '2 Devices • Shared Lobby' : '1 Device • Pass & Play'}
+                      {activeGameMode === 'online' ? '2 Devices • Shared Lobby' : '1 Device • Pass & Play'}
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         sfx('boing');
-                        setSelectedGame(game.type);
+                        setActiveGame(game.type);
                       }}
                       className="arcade-btn arcade-btn-pink text-sm py-2 px-5 cursor-pointer"
                     >
@@ -465,6 +582,35 @@ export const GamesArea: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Resignation / Leave Confirmation Modal */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="arcade-card p-5 sm:p-6 max-w-sm w-full space-y-4 text-center border-4 border-[var(--arcade-ink)] shadow-[6px_6px_0_var(--arcade-ink)]">
+            <span className="text-4xl">🏳️</span>
+            <h3 className="font-black text-xl text-[var(--arcade-ink)]">Resign from Match?</h3>
+            <p className="text-xs sm:text-sm font-bold text-[var(--arcade-ink)] opacity-80 leading-relaxed">
+              Leaving this active match now will forfeit the game to your partner. Are you sure you want to resign?
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowLeaveConfirm(false)}
+                className="arcade-btn arcade-btn-secondary py-2 px-4 text-xs font-black"
+              >
+                Keep Playing
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLeave}
+                className="arcade-btn py-2 px-4 text-xs font-black bg-red-500 hover:bg-red-600 text-white"
+              >
+                Yes, Resign
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Local Player Names Edit Modal */}
       {isEditingNames && (

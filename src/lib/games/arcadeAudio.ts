@@ -1,5 +1,6 @@
 // Web Audio API Synthesizer for Silly Game Arcade
 // Generates instant, zero-asset, dependency-free retro arcade sound effects
+import { useCallStore } from '../store';
 
 let AC: AudioContext | null = null;
 let muted = false;
@@ -51,6 +52,12 @@ function tone(
   t0 = 0
 ) {
   if (muted || (!userActivated && typeof window !== 'undefined')) return;
+  try {
+    // Suppress game sfx if call is ringing or active so conversations are not interrupted
+    const callState = useCallStore.getState?.()?.callState;
+    if (callState && callState !== 'idle') return;
+  } catch {}
+
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;

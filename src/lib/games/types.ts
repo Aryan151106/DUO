@@ -111,6 +111,15 @@ export interface DoodleState {
 
 export type AnyGameState = TicTacToeState | ConnectFourState | ChessState | DoodleState;
 
+export interface GameChatMessage {
+  id: string;
+  sessionId: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  createdAt: string;
+}
+
 // ─── Game Session Document ──────────────────────────────────────────────────
 
 export interface GameSession {
@@ -125,6 +134,7 @@ export interface GameSession {
   state: AnyGameState;
   lobbyState?: LobbyState | null;
   result?: GameResult | null;
+  chatMessages?: GameChatMessage[];
   actionSeq: number; // Incrementing counter to reject stale or duplicated actions
   createdAt: string;
   updatedAt: string;

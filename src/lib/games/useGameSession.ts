@@ -14,7 +14,9 @@ import type {
   ConnectFourState,
   ChessState,
   DoodleState,
+  GameChatMessage,
 } from './types';
+import { useActiveGameStore } from './gameStore';
 import { getGameSocket } from './gameSocket';
 import {
   loadLocalSession,
@@ -47,7 +49,7 @@ function createInitialGameStateForType(type: GameType, p1Id: string, p2Id: strin
   };
 }
 
-export function useGameSession(gameType: GameType, mode: GameMode) {
+export function useGameSession(gameType: GameType | null, mode: GameMode) {
   const { currentUser, partnerUser, couple } = useAuthStore();
   const coupleId = couple?.id || 'couple-duo';
   const myUid = auth.currentUser?.uid || currentUser.id || 'p1';
@@ -68,9 +70,18 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
 
   // ─── Local Mode Initialization & Handlers ─────────────────────────────────
   const initLocalSession = useCallback(() => {
+    if (!gameType) {
+      setSession(null);
+      setStatus('setup');
+      return;
+    }
+
     const existing = loadLocalSession(gameType);
     if (existing && existing.status !== 'finished') {
       setSession(existing);
+      if (Array.isArray(existing.chatMessages)) {
+        useActiveGameStore.getState().setChatMessages(existing.id, existing.chatMessages);
+      }
       if (gameType === 'guess-from-doodle' && (existing as any).secretWord) {
         setSecretWord((existing as any).secretWord);
       }
@@ -155,6 +166,12 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
 
   // ─── Online Mode Socket & Firestore Synchronization ───────────────────────
   useEffect(() => {
+    if (!gameType) {
+      setSession(null);
+      setStatus('setup');
+      return;
+    }
+
     if (!isOnline) {
       initLocalSession();
       return;
@@ -180,6 +197,9 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
             return prev;
           });
           setStatus(data.status);
+          if (Array.isArray(data.chatMessages)) {
+            useActiveGameStore.getState().setChatMessages(sessionId, data.chatMessages);
+          }
           if (data.gameType === 'guess-from-doodle' && (data.state as DoodleState)?.doodleStrokes) {
             setDoodleStrokes((data.state as DoodleState).doodleStrokes);
           }
@@ -191,6 +211,81 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     );
 
     // 2. Connect via centralized Socket.IO
+    let activeSocket: any = null;
+
+    // Define named handlers so that only these exact callbacks are unsubscribed
+    const handleSessionState = (updatedSession: GameSession) => {
+      if (!isMounted) return;
+      setSession(updatedSession);
+      setStatus(updatedSession.status);
+      if (Array.isArray(updatedSession.chatMessages)) {
+        useActiveGameStore.getState().setChatMessages(sessionId, updatedSession.chatMessages);
+      }
+      if (updatedSession.result) {
+        confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+      }
+    };
+
+    const handleSecretWord = ({ secretWord: word }: { secretWord: string }) => {
+      if (!isMounted) return;
+      setSecretWord(word);
+    };
+
+    const handleStrokeChunk = ({ chunk }: { chunk: DoodleStrokeChunk }) => {
+      if (!isMounted) return;
+      setIncomingLiveChunk(chunk);
+      if (chunk.isComplete && chunk.points?.length > 1) {
+        setDoodleStrokes((prev) => [
+          ...prev,
+          { points: chunk.points, color: chunk.color, width: chunk.width },
+        ]);
+      }
+    };
+
+    const handleStroke = ({ stroke }: { stroke: DoodleStroke }) => {
+      if (!isMounted) return;
+      setDoodleStrokes((prev) => [...prev, stroke]);
+    };
+
+    const handleDoodleClear = () => {
+      if (!isMounted) return;
+      setDoodleStrokes([]);
+    };
+
+    const handleRematchRequested = ({ mode: rMode }: { mode?: 'keep' | 'change' }) => {
+      if (!isMounted) return;
+      setRematchRequested(true);
+      setRematchMode(rMode || 'keep');
+    };
+
+    const handleRematchSetup = () => {
+      if (!isMounted) return;
+      setRematchRequested(false);
+      setRematchMode(null);
+      setStatus('setup');
+      setDoodleStrokes([]);
+    };
+
+    const handleRematchStarted = () => {
+      if (!isMounted) return;
+      setRematchRequested(false);
+      setRematchMode(null);
+      setDoodleStrokes([]);
+    };
+
+    const handlePartnerLeft = () => {
+      if (!isMounted) return;
+      setStatus('abandoned');
+    };
+
+    const handleChatMessage = (message: GameChatMessage) => {
+      if (!isMounted) return;
+      useActiveGameStore.getState().addChatMessage(sessionId, message);
+      if (!useActiveGameStore.getState().isChatOpenMobile && message.senderId !== myUid) {
+        useActiveGameStore.getState().incrementUnreadChatCount();
+      }
+    };
+
     (async () => {
       try {
         const socket = await getGameSocket();
@@ -200,69 +295,20 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           return;
         }
 
+        activeSocket = socket;
         socketRef.current = socket;
 
-        // Register event listeners
-        socket.on('game:session_state', (updatedSession: GameSession) => {
-          if (!isMounted) return;
-          setSession(updatedSession);
-          setStatus(updatedSession.status);
-          if (updatedSession.result) {
-            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-          }
-        });
-
-        socket.on('game:secret_word', ({ secretWord: word }: { secretWord: string }) => {
-          if (!isMounted) return;
-          setSecretWord(word);
-        });
-
-        socket.on('game:doodle_stroke_chunk', ({ chunk }: { chunk: DoodleStrokeChunk }) => {
-          if (!isMounted) return;
-          setIncomingLiveChunk(chunk);
-          if (chunk.isComplete && chunk.points?.length > 1) {
-            setDoodleStrokes((prev) => [
-              ...prev,
-              { points: chunk.points, color: chunk.color, width: chunk.width },
-            ]);
-          }
-        });
-
-        socket.on('game:doodle_stroke', ({ stroke }: { stroke: DoodleStroke }) => {
-          if (!isMounted) return;
-          setDoodleStrokes((prev) => [...prev, stroke]);
-        });
-
-        socket.on('game:doodle_clear', () => {
-          if (!isMounted) return;
-          setDoodleStrokes([]);
-        });
-
-        socket.on('game:rematch_requested', ({ mode: rMode }: { mode?: 'keep' | 'change' }) => {
-          if (!isMounted) return;
-          setRematchRequested(true);
-          setRematchMode(rMode || 'keep');
-        });
-
-        socket.on('game:rematch_setup', () => {
-          if (!isMounted) return;
-          setRematchRequested(false);
-          setRematchMode(null);
-          setStatus('setup');
-          setDoodleStrokes([]);
-        });
-
-        socket.on('game:rematch_started', () => {
-          if (!isMounted) return;
-          setRematchRequested(false);
-          setRematchMode(null);
-          setDoodleStrokes([]);
-        });
-
-        socket.on('game:partner_left', () => {
-          if (!isMounted) return;
-          setStatus('abandoned');
-        });
+        // Register exact named event listeners
+        socket.on('game:session_state', handleSessionState);
+        socket.on('game:secret_word', handleSecretWord);
+        socket.on('game:doodle_stroke_chunk', handleStrokeChunk);
+        socket.on('game:doodle_stroke', handleStroke);
+        socket.on('game:doodle_clear', handleDoodleClear);
+        socket.on('game:rematch_requested', handleRematchRequested);
+        socket.on('game:rematch_setup', handleRematchSetup);
+        socket.on('game:rematch_started', handleRematchStarted);
+        socket.on('game:partner_left', handlePartnerLeft);
+        socket.on('game:chat_message', handleChatMessage);
 
         // Join online game session room
         socket.emit(
@@ -270,8 +316,8 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           {
             coupleId,
             gameType,
-            displayName: currentUser.displayName || 'Partner',
-            avatarUrl: currentUser.avatarUrl || '',
+            displayName: currentUser?.displayName || 'Partner',
+            avatarUrl: currentUser?.avatarUrl || '',
           },
           (response: any) => {
             if (!isMounted) return;
@@ -281,6 +327,9 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
             } else if (response?.session) {
               setSession(response.session);
               setStatus(response.session.status);
+              if (Array.isArray(response.session.chatMessages)) {
+                useActiveGameStore.getState().setChatMessages(sessionId, response.session.chatMessages);
+              }
             }
           }
         );
@@ -294,19 +343,21 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     return () => {
       isMounted = false;
       unsubFirestore();
-      if (socketRef.current) {
-        socketRef.current.off('game:session_state');
-        socketRef.current.off('game:secret_word');
-        socketRef.current.off('game:doodle_stroke_chunk');
-        socketRef.current.off('game:doodle_stroke');
-        socketRef.current.off('game:doodle_clear');
-        socketRef.current.off('game:rematch_requested');
-        socketRef.current.off('game:rematch_setup');
-        socketRef.current.off('game:rematch_started');
-        socketRef.current.off('game:partner_left');
+      if (activeSocket) {
+        // Remove only the specific named handlers registered above
+        activeSocket.off('game:session_state', handleSessionState);
+        activeSocket.off('game:secret_word', handleSecretWord);
+        activeSocket.off('game:doodle_stroke_chunk', handleStrokeChunk);
+        activeSocket.off('game:doodle_stroke', handleStroke);
+        activeSocket.off('game:doodle_clear', handleDoodleClear);
+        activeSocket.off('game:rematch_requested', handleRematchRequested);
+        activeSocket.off('game:rematch_setup', handleRematchSetup);
+        activeSocket.off('game:rematch_started', handleRematchStarted);
+        activeSocket.off('game:partner_left', handlePartnerLeft);
+        activeSocket.off('game:chat_message', handleChatMessage);
       }
     };
-  }, [gameType, isOnline, coupleId, myUid, currentUser.displayName, currentUser.avatarUrl, initLocalSession]);
+  }, [gameType, isOnline, coupleId, myUid, currentUser?.displayName, currentUser?.avatarUrl, initLocalSession]);
 
   // ─── Select Choice in Lobby ───────────────────────────────────────────────
   const selectChoice = useCallback(
@@ -710,7 +761,7 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
           setDoodleStrokes([]);
         } else {
           // Keep choices, alternate starting player
-          clearLocalSession(gameType);
+          if (gameType) clearLocalSession(gameType);
           setDoodleStrokes([]);
           initLocalSession();
         }
@@ -722,10 +773,63 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
   const leaveGame = useCallback(async () => {
     if (isOnline && socketRef.current && session) {
       socketRef.current.emit('game:leave', { sessionId: session.id });
-    } else if (!isOnline) {
+    } else if (!isOnline && gameType) {
       clearLocalSession(gameType);
     }
   }, [isOnline, session, gameType]);
+
+  const sendChatMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || !session) return;
+      if (trimmed.length > 300) {
+        throw new Error('Message cannot exceed 300 characters');
+      }
+
+      if (isOnline) {
+        if (!socketRef.current) {
+          throw new Error('Not connected to game server');
+        }
+        return new Promise<void>((resolve, reject) => {
+          socketRef.current.emit(
+            'game:chat_send',
+            { sessionId: session.id, text: trimmed },
+            (response: any) => {
+              if (response?.error) {
+                reject(new Error(response.error));
+              } else {
+                resolve();
+              }
+            }
+          );
+        });
+      } else {
+        // Local mode pass-and-play chat / notes
+        const pNames = getLocalPlayerNames();
+        const senderName =
+          session.currentTurnPlayerId === 'p2' ? pNames.player2Name : pNames.player1Name;
+        const senderId = session.currentTurnPlayerId || 'p1';
+        const newMsg: GameChatMessage = {
+          id: `local_msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          sessionId: session.id,
+          senderId,
+          senderName,
+          text: trimmed,
+          createdAt: new Date().toISOString(),
+        };
+
+        const updatedMessages = [...(session.chatMessages || []), newMsg];
+        const updatedSession: GameSession = {
+          ...session,
+          chatMessages: updatedMessages,
+        };
+        setSession(updatedSession);
+        saveLocalSession(updatedSession);
+        useActiveGameStore.getState().addChatMessage(session.id, newMsg);
+      }
+    },
+    [isOnline, session]
+  );
 
   const setLocalPlayerNamesConfig = useCallback(
     (p1: string, p2: string) => {
@@ -779,11 +883,14 @@ export function useGameSession(gameType: GameType, mode: GameMode) {
     confirmReady,
     requestRematch,
     leaveGame,
+    sendChatMessage,
     setLocalPlayerNamesConfig,
     resetLocalMatch: () => {
-      clearLocalSession(gameType);
-      setDoodleStrokes([]);
-      initLocalSession();
+      if (gameType) {
+        clearLocalSession(gameType);
+        setDoodleStrokes([]);
+        initLocalSession();
+      }
     },
   };
 }

@@ -72,6 +72,8 @@ function evaluateConnectFourWin(grid, r, c) {
 
 // In-memory active game sessions: Map<sessionId, SessionData>
 const serverSessions = new Map();
+// Rate limit tracker for in-game chat: Map<uid, { count: number, resetAt: number }>
+const userChatRateLimit = new Map();
 
 /**
  * Evaluates whether current choices between the two players in the lobby conflict.
@@ -257,6 +259,7 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
             session = {
               ...data,
               secretWord: data.secretWord || null,
+              chatMessages: Array.isArray(data.chatMessages) ? data.chatMessages : [],
             };
             serverSessions.set(sessionId, session);
           }
@@ -310,6 +313,7 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
           },
           secretWord: null,
           result: null,
+          chatMessages: [],
           actionSeq: 1,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -971,7 +975,79 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
     }
   });
 
-  // 12. Socket Disconnect Hook
+  // 12. Live In-Game Chat Message
+  socket.on('game:chat_send', async (payload, callback) => {
+    try {
+      const { sessionId, text } = payload || {};
+      if (!sessionId || typeof text !== 'string') {
+        if (typeof callback === 'function') callback({ error: 'Invalid message payload' });
+        return;
+      }
+
+      const trimmed = text.trim();
+      if (!trimmed) {
+        if (typeof callback === 'function') callback({ error: 'Message cannot be empty' });
+        return;
+      }
+
+      if (trimmed.length > 300) {
+        if (typeof callback === 'function') callback({ error: 'Message cannot exceed 300 characters' });
+        return;
+      }
+
+      const session = serverSessions.get(sessionId);
+      if (!session || !session.playerIds.includes(uid)) {
+        if (typeof callback === 'function') callback({ error: 'Session not found or unauthorized' });
+        return;
+      }
+
+      // Anti-spam rate limit: max 5 messages per 3 seconds
+      const now = Date.now();
+      const rateData = userChatRateLimit.get(uid) || { count: 0, resetAt: now + 3000 };
+      if (now > rateData.resetAt) {
+        rateData.count = 1;
+        rateData.resetAt = now + 3000;
+      } else {
+        rateData.count += 1;
+        if (rateData.count > 5) {
+          if (typeof callback === 'function') callback({ error: 'Sending too fast. Please slow down.' });
+          return;
+        }
+      }
+      userChatRateLimit.set(uid, rateData);
+
+      const senderName = session.players[uid]?.displayName || 'Partner';
+      const message = {
+        id: `gchat_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        sessionId,
+        senderId: uid,
+        senderName,
+        text: trimmed,
+        createdAt: new Date().toISOString(),
+      };
+
+      if (!Array.isArray(session.chatMessages)) {
+        session.chatMessages = [];
+      }
+      session.chatMessages.push(message);
+      if (session.chatMessages.length > 100) {
+        session.chatMessages = session.chatMessages.slice(-100);
+      }
+      session.updatedAt = new Date().toISOString();
+
+      await persistSessionToFirestore(db, session.coupleId, session);
+
+      const socketRoom = `game_room:${sessionId}`;
+      io.to(socketRoom).emit('game:chat_message', message);
+
+      if (typeof callback === 'function') callback({ success: true, message });
+    } catch (err) {
+      console.error('[GameServer] game:chat_send error:', err);
+      if (typeof callback === 'function') callback({ error: err.message });
+    }
+  });
+
+  // 13. Socket Disconnect Hook
   socket.on('disconnect', async () => {
     const sessionId = socket.data.currentGameSessionId;
     if (sessionId) {
@@ -991,6 +1067,7 @@ export function setupGameSocketHandlers(io, socket, db, admin, isProduction, ver
 function getSafeSessionPayload(session) {
   const safe = { ...session };
   delete safe.secretWord;
+  safe.chatMessages = Array.isArray(session.chatMessages) ? session.chatMessages : [];
   return safe;
 }
 
