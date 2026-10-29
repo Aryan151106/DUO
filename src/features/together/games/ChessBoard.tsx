@@ -275,6 +275,23 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                   : '';
               const idleDelay = `${((r * 3 + c * 5) % 9) * 0.55}s`;
 
+              // Ensure clean, prioritized animation on piece without class conflict
+              const pieceAnimClass = isSelected
+                ? 'arcade-chess-bounce'
+                : isLastMoveDestination
+                ? 'arcade-piece-moving'
+                : lastLandedSquare === squareName
+                ? 'arcade-land'
+                : kingMood === 'scared'
+                ? 'arcade-king-scared'
+                : kingMood === 'relief'
+                ? 'arcade-king-relief'
+                : kingMood === 'grin'
+                ? 'arcade-king-grin'
+                : isCheckKing
+                ? 'arcade-shake'
+                : 'arcade-piece-idle';
+
               return (
                 <div
                   key={squareName}
@@ -287,28 +304,14 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 >
                   {piece && (
                     <div
-                      key={`piece-${piece.color}-${piece.type}-${squareName}-${state.lastMove?.san || ''}-${kingMood}`}
+                      key={`piece-${piece.color}-${piece.type}-${squareName}-${state.lastMove?.san || ''}-${kingMood}-${isSelected ? 'sel' : 'norm'}`}
                       style={
                         {
                           ...(isLastMoveDestination ? { '--move-dx': moveDx, '--move-dy': moveDy } : {}),
                           '--d': idleDelay,
                         } as React.CSSProperties
                       }
-                      className={`arcade-chess-piece arcade-piece-idle ${
-                        isLastMoveDestination ? 'arcade-piece-moving' : ''
-                      } ${lastLandedSquare === squareName ? 'arcade-land' : ''} ${
-                        isSelected ? 'arcade-chess-bounce' : ''
-                      } ${
-                        kingMood === 'scared'
-                          ? 'arcade-king-scared'
-                          : kingMood === 'relief'
-                          ? 'arcade-king-relief'
-                          : kingMood === 'grin'
-                          ? 'arcade-king-grin'
-                          : isCheckKing
-                          ? 'arcade-shake'
-                          : ''
-                      }`}
+                      className={`arcade-chess-piece ${pieceAnimClass}`}
                     >
                       <GoofyChessPiece
                         type={piece.type}

@@ -203,15 +203,21 @@
   transition: transform 0.15s ease-out;
 }
 
-.arcade-chess-piece:hover {
+.arcade-chess-piece:hover:not(.arcade-chess-bounce) {
   transform: scale(1.12) rotate(-5deg);
 }
 
-.arcade-chess-bounce {
-  animation: arcade-bounce 0.5s infinite alternate ease-in-out;
+.arcade-chess-bounce,
+.arcade-chess-piece.arcade-chess-bounce {
+  animation: arcade-bounce 0.5s infinite alternate ease-in-out !important;
+  transform-origin: center bottom;
+  z-index: 20;
 }
 
 @keyframes arcade-bounce {
+  from {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
   to {
     transform: translateY(-8px) rotate(10deg) scale(1.15);
   }
