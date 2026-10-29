@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { GameSession, DoodleState, DoodleStroke, DoodleStrokeChunk } from '../../../lib/games/types';
 import { GoogleIcon } from '../../../components/GoogleIcon';
+import { sfx } from '../../../lib/games/arcadeAudio';
 
 interface DoodleBoardProps {
   session: GameSession;
@@ -48,6 +49,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
   const [guessInput, setGuessInput] = useState('');
   const [guessFeedback, setGuessFeedback] = useState<string | null>(null);
   const [shakingCanvas, setShakingCanvas] = useState(false);
+  const [canvasJumping, setCanvasJumping] = useState(false);
 
   // Offline pass-and-play stage: 'pass-to-drawer' -> 'drawing' -> 'pass-to-guesser' -> 'guessing'
   const [localStage, setLocalStage] = useState<'pass-to-drawer' | 'drawing' | 'guessing'>(
@@ -130,6 +132,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawer || isFinished) return;
+    if (Math.random() < 0.3) sfx('pop');
     setIsDrawing(true);
     const pt = getCanvasPoint(e);
     currentStrokeRef.current = [pt];
@@ -217,8 +220,12 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
     const res = await onSubmitGuess(guessText);
 
     if (res.correct) {
+      sfx('win');
+      setCanvasJumping(true);
+      setTimeout(() => setCanvasJumping(false), 900);
       setGuessFeedback(`🎉 Correct! It was ${res.word?.toUpperCase()}!`);
     } else {
+      sfx('wah');
       setShakingCanvas(true);
       setGuessFeedback(`“${guessText}” is incorrect`);
       setTimeout(() => setShakingCanvas(false), 500);
@@ -264,7 +271,10 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
           </p>
           <button
             type="button"
-            onClick={() => setLocalStage('drawing')}
+            onClick={() => {
+              sfx('ding');
+              setLocalStage('drawing');
+            }}
             className="arcade-btn arcade-btn-pink text-xs sm:text-sm"
           >
             I am Ready! Show Secret Word 🎨
@@ -277,7 +287,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
         <div
           className={`w-full aspect-[4/3] sm:aspect-[16/10] max-w-[840px] bg-white border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl overflow-hidden shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] relative min-w-0 ${
             shakingCanvas ? 'arcade-shake' : ''
-          }`}
+          } ${canvasJumping ? 'arcade-jump' : ''}`}
         >
           <canvas
             ref={canvasRef}
@@ -314,7 +324,10 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClear}
+              onClick={() => {
+                sfx('slide');
+                onClear();
+              }}
               className="arcade-btn py-1.5 px-3.5 text-xs sm:text-sm bg-white"
             >
               <GoogleIcon name="delete" size={16} />
@@ -324,7 +337,10 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
             {!isOnline && localStage === 'drawing' && (
               <button
                 type="button"
-                onClick={() => setLocalStage('guessing')}
+                onClick={() => {
+                  sfx('ding');
+                  setLocalStage('guessing');
+                }}
                 className="arcade-btn arcade-btn-pink py-1.5 px-4 text-xs sm:text-sm"
               >
                 <span>Done Drawing! Pass Device ✅</span>
@@ -356,7 +372,10 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
             </button>
             <button
               type="button"
-              onClick={onRequestHint}
+              onClick={() => {
+                sfx('ding');
+                onRequestHint();
+              }}
               className="arcade-btn py-2 sm:py-3 text-xs sm:text-base bg-[#ffc233] shrink-0"
               title="Reveal one letter"
             >

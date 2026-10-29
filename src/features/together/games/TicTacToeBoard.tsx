@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { GameSession, TicTacToeState } from '../../../lib/games/types';
 import { GoogleIcon } from '../../../components/GoogleIcon';
+import { sfx } from '../../../lib/games/arcadeAudio';
 
 interface TicTacToeBoardProps {
   session: GameSession;
@@ -22,6 +23,7 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
   rematchRequested,
 }) => {
   const [moving, setMoving] = useState(false);
+  const [boardFlipped, setBoardFlipped] = useState(false);
   const state = session.state as TicTacToeState;
   const board = state.board || Array(9).fill(null);
   const winningLine = state.winningLine || [];
@@ -32,9 +34,22 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
     ? session.players[session.currentTurnPlayerId]
     : null;
 
+  useEffect(() => {
+    if (!isFinished) return;
+    if (result?.outcome === 'draw') {
+      sfx('sad');
+      setBoardFlipped(true);
+      const timer = setTimeout(() => setBoardFlipped(false), 1100);
+      return () => clearTimeout(timer);
+    } else if (result?.winnerPlayerId) {
+      sfx('win');
+    }
+  }, [isFinished, result?.outcome, result?.winnerPlayerId]);
+
   const handleCellClick = async (index: number) => {
     if (isFinished || board[index] || !isMyTurn || moving) return;
     setMoving(true);
+    sfx(currentTurnPlayer?.role === 'O' ? 'bonk' : 'pop');
     try {
       await onMove({ cellIndex: index });
     } catch (e) {
@@ -76,7 +91,7 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
       </div>
 
       {/* 3x3 Grid - Maximized & Proportionate on Desktop and Mobile */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-3.5 p-1.5 sm:p-4 bg-[var(--arcade-card)] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[500px] min-w-0">
+      <div className={`grid grid-cols-3 gap-2 sm:gap-3.5 p-1.5 sm:p-4 bg-[var(--arcade-card)] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[500px] min-w-0 ${boardFlipped ? 'arcade-flip' : ''}`}>
         {board.map((cell, idx) => {
           const isWinningCell = winningLine.includes(idx);
           const cellColor =

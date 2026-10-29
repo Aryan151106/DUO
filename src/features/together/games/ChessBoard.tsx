@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Chess } from 'chess.js';
 import type { GameSession, ChessState } from '../../../lib/games/types';
 import { getLegalMovesForSquare, isPromotionMove } from '../../../lib/games/engines/chessEngine';
@@ -6,6 +6,7 @@ import {
   GoofyChessPiece,
 } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
+import { sfx } from '../../../lib/games/arcadeAudio';
 
 interface ChessBoardProps {
   session: GameSession;
@@ -36,6 +37,9 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     dx: number;
   } | null>(null);
   const [boardShaking, setBoardShaking] = useState(false);
+  const [boardSpinning, setBoardSpinning] = useState(false);
+  const [lastLandedSquare, setLastLandedSquare] = useState<string | null>(null);
+  const [kmood, setKmood] = useState<{ w: string; b: string }>({ w: '', b: '' });
   const [moving, setMoving] = useState(false);
 
   const state = session.state as ChessState;
@@ -49,6 +53,23 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   const currentTurnPlayer = session.currentTurnPlayerId
     ? session.players[session.currentTurnPlayerId]
     : null;
+
+  // Sound effects on check, checkmate, stalemate
+  useEffect(() => {
+    if (isFinished) {
+      if (state.isCheckmate) {
+        sfx('win');
+        setBoardSpinning(true);
+        const timer = setTimeout(() => setBoardSpinning(false), 1300);
+        return () => clearTimeout(timer);
+      } else if (state.isStalemate || state.isDraw) {
+        sfx('sad');
+      }
+    } else if (state.isCheck) {
+      const timer = setTimeout(() => sfx('alarm'), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isFinished, state.isCheckmate, state.isStalemate, state.isDraw, state.isCheck]);
 
   // Board orientation: White at bottom for white player, flipped for black
   const isFlipped = session.mode === 'online' && myRole === 'b';
@@ -81,6 +102,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       }
 
       setSelectedSquare(squareName);
+      sfx('pop');
       const moves = getLegalMovesForSquare(state.fen, squareName);
       setLegalMoves(moves);
     } else {
@@ -95,9 +117,22 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
     setLegalMoves([]);
     setPendingPromotion(null);
 
-    // Check if target has a piece to trigger ghost flyaway & board shake
+    const wasCheck = state.isCheck;
+    const moverPiece = chess.get(from as any);
     const targetPiece = chess.get(to as any);
+
+    // Trigger squash landing animation
+    setLastLandedSquare(to);
+    setTimeout(() => setLastLandedSquare(null), 450);
+
+    // Capture sound & animation or normal drop sound
     if (targetPiece) {
+      sfx('bonk');
+      const capType = targetPiece.type;
+      setTimeout(() => {
+        sfx(capType === 'p' ? 'quack' : capType === 'q' ? 'wah' : 'slide');
+      }, 150);
+
       const dx = Math.random() * 240 - 120;
       setGhostPiece({
         type: targetPiece.type,
@@ -110,6 +145,19 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       setTimeout(() => {
         setGhostPiece(null);
       }, 1600);
+    } else {
+      sfx('plop');
+    }
+
+    // King check escape mood reaction
+    if (wasCheck && moverPiece) {
+      const esc = moverPiece.type === 'k';
+      const moverColor = moverPiece.color as 'w' | 'b';
+      setKmood((prev) => ({ ...prev, [moverColor]: esc ? 'grin' : 'relief' }));
+      sfx(esc ? 'evil' : 'phew');
+      setTimeout(() => {
+        setKmood((prev) => ({ ...prev, [moverColor]: '' }));
+      }, 2600);
     }
 
     try {
@@ -181,7 +229,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       <div
         className={`relative p-1 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[580px] min-w-0 ${
           boardShaking ? 'arcade-board-shake' : ''
-        }`}
+        } ${boardSpinning ? 'arcade-b360' : ''}`}
       >
         <div className="grid grid-cols-8 grid-rows-8 w-full h-full border-2 border-[var(--arcade-ink)] rounded-lg overflow-hidden relative">
           {rows.map((r) =>
@@ -220,6 +268,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 moveDy = `${deltaRow * 100}%`;
               }
 
+              // Compute dynamic King mood
+              const kingMood =
+                piece && piece.type === 'k'
+                  ? (kmood[piece.color as 'w' | 'b'] || (isCheckKing ? 'scared' : ''))
+                  : '';
+              const idleDelay = `${((r * 3 + c * 5) % 9) * 0.55}s`;
+
               return (
                 <div
                   key={squareName}
@@ -232,19 +287,34 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 >
                   {piece && (
                     <div
-                      key={`piece-${piece.color}-${piece.type}-${squareName}-${state.lastMove?.san || ''}`}
+                      key={`piece-${piece.color}-${piece.type}-${squareName}-${state.lastMove?.san || ''}-${kingMood}`}
                       style={
-                        isLastMoveDestination
-                          ? ({ '--move-dx': moveDx, '--move-dy': moveDy } as React.CSSProperties)
-                          : undefined
+                        {
+                          ...(isLastMoveDestination ? { '--move-dx': moveDx, '--move-dy': moveDy } : {}),
+                          '--d': idleDelay,
+                        } as React.CSSProperties
                       }
-                      className={`arcade-chess-piece ${
+                      className={`arcade-chess-piece arcade-piece-idle ${
                         isLastMoveDestination ? 'arcade-piece-moving' : ''
-                      } ${isSelected ? 'arcade-chess-bounce' : ''} ${
-                        isCheckKing ? 'arcade-shake' : ''
+                      } ${lastLandedSquare === squareName ? 'arcade-land' : ''} ${
+                        isSelected ? 'arcade-chess-bounce' : ''
+                      } ${
+                        kingMood === 'scared'
+                          ? 'arcade-king-scared'
+                          : kingMood === 'relief'
+                          ? 'arcade-king-relief'
+                          : kingMood === 'grin'
+                          ? 'arcade-king-grin'
+                          : isCheckKing
+                          ? 'arcade-shake'
+                          : ''
                       }`}
                     >
-                      <GoofyChessPiece type={piece.type} isWhite={piece.color === 'w'} />
+                      <GoofyChessPiece
+                        type={piece.type}
+                        isWhite={piece.color === 'w'}
+                        mood={kingMood as any}
+                      />
                     </div>
                   )}
 

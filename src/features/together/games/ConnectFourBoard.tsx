@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { GameSession, ConnectFourState } from '../../../lib/games/types';
 import { C4_COLS, C4_ROWS } from '../../../lib/games/engines/connectFour';
 import { GoogleIcon } from '../../../components/GoogleIcon';
+import { sfx } from '../../../lib/games/arcadeAudio';
 
 interface ConnectFourBoardProps {
   session: GameSession;
@@ -23,6 +24,7 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
 }) => {
   const [moving, setMoving] = useState(false);
   const [shaking, setShaking] = useState(false);
+  const [boardBumped, setBoardBumped] = useState(false);
   const state = session.state as ConnectFourState;
   const grid = state.grid || Array.from({ length: C4_ROWS }, () => Array(C4_COLS).fill(null));
   const winningCells = state.winningCells || [];
@@ -33,6 +35,15 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
   const currentTurnPlayer = session.currentTurnPlayerId
     ? session.players[session.currentTurnPlayerId]
     : null;
+
+  useEffect(() => {
+    if (!isFinished) return;
+    if (result?.outcome === 'draw') {
+      sfx('sad');
+    } else if (result?.winnerPlayerId) {
+      sfx('win');
+    }
+  }, [isFinished, result?.outcome, result?.winnerPlayerId]);
 
   // Resolve color hex from session players or fallback
   const getCellColor = (val: string | null): string => {
@@ -49,12 +60,19 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
   const handleColClick = async (col: number) => {
     if (isFinished || !isMyTurn || moving) return;
     if (grid[0][col] !== null) {
+      sfx('buzz');
       setShaking(true);
       setTimeout(() => setShaking(false), 500);
       return;
     }
 
     setMoving(true);
+    setTimeout(() => {
+      sfx('plop');
+      setBoardBumped(true);
+      setTimeout(() => setBoardBumped(false), 400);
+    }, 360);
+
     try {
       await onMove({ col });
     } catch (e) {
@@ -120,7 +138,7 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
       <div
         className={`p-1.5 sm:p-4 bg-[#2455d6] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full max-w-[600px] min-w-0 ${
           shaking ? 'arcade-shake' : ''
-        }`}
+        } ${boardBumped ? 'arcade-bump' : ''}`}
       >
         <div className="grid grid-cols-7 gap-1 sm:gap-2.5">
           {grid.map((row, r) =>

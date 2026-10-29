@@ -53,7 +53,11 @@ export const FLOATING_EMOJIS = ['🎲', '♟️', '🔴', '❌', '⭕', '🖍️
  * Custom SVG goofy chess piece inspired by Silly Game Arcade.
  * Features googly eyes, propellers, chunky outlines, and expressive facial elements.
  */
-export const GoofyChessPiece: React.FC<{ type: string; isWhite: boolean }> = ({ type, isWhite }) => {
+export const GoofyChessPiece: React.FC<{
+  type: string;
+  isWhite: boolean;
+  mood?: 'scared' | 'relief' | 'grin' | '';
+}> = ({ type, isWhite, mood = '' }) => {
   const S = '#2b2140';
   const f = isWhite ? '#fff4d9' : '#6a4fb0';
   const a = isWhite ? '#ff8fb1' : '#ffc233';
@@ -135,17 +139,71 @@ export const GoofyChessPiece: React.FC<{ type: string; isWhite: boolean }> = ({ 
             <path d="M43 70q7 8 14 0q-7-3-14 0z" fill="#ff2d6f" stroke={S} strokeWidth="2" />
           </>
         );
-      case 'K':
+      case 'K': {
+        const mu = <path d="M50 72q-8-8-21-2 7 9 21 2 14 7 21-2-13-6-21 2z" fill={S} />;
+        const st = { stroke: S, strokeWidth: '3', strokeLinecap: 'round' as const, fill: 'none' };
+
+        const renderKingFace = () => {
+          if (mood === 'scared') {
+            return (
+              <>
+                <circle cx="40" cy="59" r="9" fill="#fff" stroke={S} strokeWidth="2.5" />
+                <circle cx="60" cy="59" r="9" fill="#fff" stroke={S} strokeWidth="2.5" />
+                <circle className="arcade-chess-eye" cx="40" cy="59" r="2" fill={S} />
+                <circle className="arcade-chess-eye" cx="60" cy="59" r="2" fill={S} />
+                <path d="M31 47l12 5M69 47l-12 5" {...st} />
+                {mu}
+                <ellipse cx="50" cy="79" rx="5" ry="4" fill="#7a1f3d" stroke={S} strokeWidth="2" />
+                <path className="arcade-sweat" d="M76 50q6 9 0 12q-6-3 0-12z" fill="#7fd8ff" stroke={S} strokeWidth="1.5" />
+              </>
+            );
+          }
+          if (mood === 'relief') {
+            return (
+              <>
+                <path d="M33 61q7-8 14 0M53 61q7-8 14 0" {...st} />
+                <circle cx="34" cy="68" r="4" fill="#ff8fb1" opacity="0.7" />
+                <circle cx="66" cy="68" r="4" fill="#ff8fb1" opacity="0.7" />
+                {mu}
+                <path d="M42 78q8 7 16 0" {...st} />
+                <g className="arcade-puff">
+                  <circle cx="82" cy="66" r="4" fill="#fff" stroke={S} strokeWidth="2" />
+                  <circle cx="90" cy="62" r="2.5" fill="#fff" stroke={S} strokeWidth="1.5" />
+                </g>
+              </>
+            );
+          }
+          if (mood === 'grin') {
+            return (
+              <>
+                {eye(41, 61, 6, 'ke1')}
+                {eye(59, 61, 6, 'ke2')}
+                <path d="M30 50l15 7M70 50l-15 7" {...st} />
+                {mu}
+                <path d="M36 75q14 14 28 0z" fill="#fff" stroke={S} strokeWidth="3" strokeLinejoin="round" />
+                <path d="M44 78v5M50 79v6M56 78v5" stroke={S} strokeWidth="2" />
+                <path className="arcade-tw" d="M70 66l2 4 4 2-4 2-2 4-2-4-4-2 4-2z" fill="#ffd23a" />
+              </>
+            );
+          }
+          return (
+            <>
+              {eye(41, 60, 7, 'e1')}
+              {eye(59, 60, 7, 'e2')}
+              {mu}
+            </>
+          );
+        };
+
         return (
           <>
             <path d="M30 80C30 60 38 50 50 50s20 10 20 30z" fill={f} {...baseSvgAttrs} />
             <path d="M33 46l-2-18 11 8 8-12 8 12 11-8-2 18z" fill={a} {...baseSvgAttrs} />
             <path d="M50 8v16M44 13h12" stroke={S} strokeWidth="4" strokeLinecap="round" />
-            {eye(41, 60, 7, 'e1')}
-            {eye(59, 60, 7, 'e2')}
-            <path d="M50 72q-8-8-21-2 7 9 21 2 14 7 21-2-13-6-21 2z" fill={S} />
+            {renderKingFace()}
           </>
         );
+      }
       default:
         return null;
     }

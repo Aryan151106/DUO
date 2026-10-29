@@ -9,6 +9,7 @@ import { DoodleBoard } from './DoodleBoard';
 import { GameStatsModal } from './GameStatsModal';
 import { FLOATING_EMOJIS } from '../../../lib/games/arcadeAssets';
 import { GoogleIcon } from '../../../components/GoogleIcon';
+import { sfx, isArcadeMuted, toggleArcadeMuted } from '../../../lib/games/arcadeAudio';
 import '../../../lib/games/arcadeTheme.css';
 
 interface GameCardMeta {
@@ -61,6 +62,7 @@ export const GamesArea: React.FC = () => {
   const [isMascotWobbling, setIsMascotWobbling] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEditingNames, setIsEditingNames] = useState(false);
+  const [isMuted, setIsMuted] = useState(isArcadeMuted());
 
   // Local names input state
   const [p1Input, setP1Input] = useState('');
@@ -69,9 +71,31 @@ export const GamesArea: React.FC = () => {
   // Active game session hook for currently selected game
   const activeSessionHook = useGameSession(selectedGame || 'tic-tac-toe', selectedMode);
 
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Generate playful sparks matching user's HTML
+    const emojis = ['✨', '💥', '⭐', '🎈'];
+    for (let i = 0; i < 6; i++) {
+      const spark = document.createElement('div');
+      spark.className = 'arcade-spark';
+      spark.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      spark.style.left = `${e.clientX}px`;
+      spark.style.top = `${e.clientY}px`;
+      spark.style.setProperty('--x', `${Math.random() * 160 - 80}px`);
+      spark.style.setProperty('--y', `${-20 - Math.random() * 140}px`);
+      document.body.appendChild(spark);
+      setTimeout(() => spark.remove(), 800);
+    }
+  };
+
   const handleMascotPoke = () => {
+    sfx('boing');
     setIsMascotWobbling(true);
-    setTimeout(() => setIsMascotWobbling(false), 500);
+    setTimeout(() => setIsMascotWobbling(false), 700);
+  };
+
+  const handleToggleMute = () => {
+    const next = toggleArcadeMuted();
+    setIsMuted(next);
   };
 
   const handleOpenEditNames = () => {
@@ -88,6 +112,7 @@ export const GamesArea: React.FC = () => {
 
   return (
     <div
+      onPointerDown={handlePointerDown}
       className={`silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto ${
         selectedGame ? 'px-1 sm:px-4' : 'px-2.5 sm:px-4'
       } py-1.5 sm:py-4 relative min-h-[600px] min-w-0`}
@@ -117,7 +142,7 @@ export const GamesArea: React.FC = () => {
             <div
               onClick={handleMascotPoke}
               className={`arcade-mascot text-5xl sm:text-6xl inline-block cursor-pointer select-none ${
-                isMascotWobbling ? 'arcade-wobble' : ''
+                isMascotWobbling ? 'arcade-mascot-spin' : ''
               }`}
               title="Poke me!"
             >
@@ -137,6 +162,15 @@ export const GamesArea: React.FC = () => {
               >
                 <GoogleIcon name="emoji_events" size={16} />
                 <span>Streaks & Records 🏆</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleToggleMute}
+                className="arcade-btn arcade-btn-pill text-xs sm:text-sm py-1.5 px-3 bg-white"
+                title={isMuted ? 'Unmute Sound FX' : 'Mute Sound FX'}
+              >
+                <span>{isMuted ? '🔇 Muted' : '🔊 Sound On'}</span>
               </button>
 
               {selectedMode === 'local' && (
@@ -176,7 +210,7 @@ export const GamesArea: React.FC = () => {
               <div className="hidden sm:flex items-center gap-2">
                 <div
                   onClick={handleMascotPoke}
-                  className={`text-2xl cursor-pointer select-none ${isMascotWobbling ? 'arcade-wobble' : ''}`}
+                  className={`text-2xl cursor-pointer select-none ${isMascotWobbling ? 'arcade-mascot-spin' : ''}`}
                   title="Poke me!"
                 >
                   🤪
@@ -184,6 +218,14 @@ export const GamesArea: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleToggleMute}
+                  className="arcade-btn py-1 px-2.5 text-xs bg-white"
+                  title={isMuted ? 'Unmute Sound' : 'Mute Sound'}
+                >
+                  {isMuted ? '🔇' : '🔊'}
+                </button>
                 <button
                   type="button"
                   onClick={() => setIsStatsOpen(true)}
@@ -194,7 +236,10 @@ export const GamesArea: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedGame(null)}
+                  onClick={() => {
+                    sfx('boing');
+                    setSelectedGame(null);
+                  }}
                   className="arcade-btn py-1 px-3 text-xs bg-white"
                 >
                   All Games
@@ -334,7 +379,10 @@ export const GamesArea: React.FC = () => {
               <div className="inline-grid grid-cols-2 gap-2 p-1.5 bg-[var(--arcade-bg)] border-[3px] border-[var(--arcade-ink)] rounded-2xl max-w-sm w-full mx-auto shadow-inner">
                 <button
                   type="button"
-                  onClick={() => setSelectedMode('online')}
+                  onClick={() => {
+                    sfx('boing');
+                    setSelectedMode('online');
+                  }}
                   className={`py-2 px-3 rounded-xl font-black text-xs sm:text-sm border-2 border-[var(--arcade-ink)] transition-transform cursor-pointer ${
                     selectedMode === 'online'
                       ? 'bg-[#2bb5d4] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
@@ -345,7 +393,10 @@ export const GamesArea: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSelectedMode('local')}
+                  onClick={() => {
+                    sfx('boing');
+                    setSelectedMode('local');
+                  }}
                   className={`py-2 px-3 rounded-xl font-black text-xs sm:text-sm border-2 border-[var(--arcade-ink)] transition-transform cursor-pointer ${
                     selectedMode === 'local'
                       ? 'bg-[#ff5d8f] text-white shadow-[2px_2px_0_var(--arcade-ink)] scale-102'
@@ -398,7 +449,10 @@ export const GamesArea: React.FC = () => {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setSelectedGame(game.type)}
+                      onClick={() => {
+                        sfx('boing');
+                        setSelectedGame(game.type);
+                      }}
                       className="arcade-btn arcade-btn-pink text-sm py-2 px-5 cursor-pointer"
                     >
                       <span>Play Now</span>
