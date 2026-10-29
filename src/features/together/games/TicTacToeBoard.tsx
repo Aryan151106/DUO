@@ -45,12 +45,12 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(96vw,520px)] mx-auto space-y-3 px-1 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[500px] mx-auto space-y-2.5 sm:space-y-3 min-w-0">
       {/* Turn & Status Header */}
-      <div className="w-full text-center">
+      <div className="w-full text-center min-w-0">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
-            <span className="text-xl">
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-xs sm:text-base">
+            <span className="text-lg sm:text-xl">
               {currentTurnPlayer?.role === 'X' ? '❌' : '⭕'}
             </span>
             <span>
@@ -62,8 +62,8 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
             </span>
           </div>
         ) : (
-          <div className="inline-flex flex-col items-center gap-1 px-5 py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
-            <span className="text-2xl font-black">
+          <div className="inline-flex flex-col items-center gap-1 px-4 sm:px-5 py-2 sm:py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
+            <span className="text-xl sm:text-2xl font-black">
               {result?.outcome === 'draw'
                 ? '🤝 It’s a Draw!'
                 : `🎉 ${result?.winnerName || 'Winner'} Wins!`}
@@ -76,7 +76,7 @@ export const TicTacToeBoard: React.FC<TicTacToeBoardProps> = ({
       </div>
 
       {/* 3x3 Grid - Maximized & Proportionate on Desktop and Mobile */}
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4 p-3 sm:p-5 bg-[var(--arcade-card)] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-3xl shadow-[5px_5px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(96vw,500px)]">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3.5 p-1.5 sm:p-4 bg-[var(--arcade-card)] border-[3px] sm:border-[4px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[6px_6px_0_var(--arcade-ink)] w-full aspect-square max-w-[500px] min-w-0">
         {board.map((cell, idx) => {
           const isWinningCell = winningLine.includes(idx);
           const cellColor =

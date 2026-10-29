@@ -40,12 +40,14 @@ const NAV_ITEMS = [
 ] as const;
 
 export const Shell: React.FC = () => {
-  const { activeTab, setTab, couple, setTogetherSubTab, currentUser } = useAuthStore();
+  const { activeTab, setTab, couple, setTogetherSubTab, currentUser, togetherSubTab } = useAuthStore();
   const activeRoomInfo = useMediaRoomStore((s) => s.activeRoomInfo);
   const activeSession = useActiveSession(couple?.id || null);
   const activeTogetherRoom = useAnyActiveTogetherRoom(couple?.id || null);
   const effectiveSession = activeTogetherRoom || activeSession;
   const { unreadCount, markAllAsRead } = useNotificationStore();
+
+  const isTogetherGames = activeTab === 'together' && togetherSubTab === 'games';
 
   // Play chime and notify when partner starts a room
   const prevRoomIdRef = useRef<string | null>(null);
@@ -233,6 +235,8 @@ export const Shell: React.FC = () => {
               ? 'h-full flex flex-col w-full max-w-[1600px] p-2 sm:p-4 flex-1'
               : activeTab === 'doodle'
               ? 'h-full w-full flex flex-col flex-1 p-1 sm:p-2 lg:p-3'
+              : isTogetherGames
+              ? 'w-full flex-1 px-0 py-2 sm:p-5 lg:p-6 max-w-[1600px]'
               : 'w-full flex-1 p-3 sm:p-5 lg:p-6 max-w-[1600px]'
           }`}
         >

@@ -218,23 +218,29 @@ export const TogetherSpace: React.FC = () => {
   }, [allAttachments]);
 
   return (
-    <div className="w-full max-w-full lg:max-w-[1600px] mx-auto px-2 sm:px-4 lg:px-6 py-1.5 sm:py-4 pb-24 lg:pb-8 space-y-3 sm:space-y-6 min-w-0">
+    <div
+      className={`w-full max-w-full lg:max-w-[1600px] mx-auto ${
+        togetherSubTab === 'games' ? 'px-0 sm:px-4 lg:px-6' : 'px-2 sm:px-4 lg:px-6'
+      } py-1.5 sm:py-4 pb-24 lg:pb-8 space-y-3 sm:space-y-6 min-w-0`}
+    >
       {/* Live Room Invitation / Active Session Banner (visible when on other sub-tabs) */}
       {effectiveSession && (
         (effectiveSession.type === 'study' && togetherSubTab !== 'focus') ||
         (effectiveSession.type === 'movie' && togetherSubTab !== 'movie')
       ) && (
-        <ActiveSessionBanner
-          session={effectiveSession}
-          isInsideRoom={false}
-          onJoin={(s) => {
-            setTogetherSubTab(s.type === 'study' ? 'focus' : 'movie');
-          }}
-        />
+        <div className={togetherSubTab === 'games' ? 'px-2.5 sm:px-0' : ''}>
+          <ActiveSessionBanner
+            session={effectiveSession}
+            isInsideRoom={false}
+            onJoin={(s) => {
+              setTogetherSubTab(s.type === 'study' ? 'focus' : 'movie');
+            }}
+          />
+        </div>
       )}
 
       {/* Header */}
-      <div className="hd mb-3">
+      <div className={`hd mb-3 ${togetherSubTab === 'games' ? 'px-2.5 sm:px-0' : ''}`}>
         <div>
           <h1 className="text-[28px] sm:text-[38px] font-display font-normal text-[var(--text)] tracking-wide">
             <WavyText text="TOGETHER" isDisplay={true} />
@@ -244,7 +250,7 @@ export const TogetherSpace: React.FC = () => {
       </div>
 
       {/* Sub-Tab Pill Bar - Single Row with Horizontal Scroll */}
-      <div className="tabs">
+      <div className={`tabs ${togetherSubTab === 'games' ? 'px-2.5 sm:px-0' : ''}`}>
         <button
           type="button"
           onClick={() => setTogetherSubTab('focus')}

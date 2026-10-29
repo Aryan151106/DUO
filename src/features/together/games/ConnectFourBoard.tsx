@@ -69,13 +69,13 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(98vw,640px)] mx-auto space-y-3 px-1 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[600px] mx-auto space-y-2 sm:space-y-3 min-w-0">
       {/* Header */}
-      <div className="w-full text-center">
+      <div className="w-full text-center min-w-0">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-xs sm:text-base">
             <span
-              className="w-5 h-5 rounded-full border-2 border-[var(--arcade-ink)] inline-block shadow-xs"
+              className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-2 border-[var(--arcade-ink)] inline-block shadow-xs"
               style={{ backgroundColor: currentTurnColor }}
             />
             <span>
@@ -87,7 +87,7 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
             </span>
           </div>
         ) : (
-          <div className="inline-flex flex-col items-center gap-1 px-5 py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
+          <div className="inline-flex flex-col items-center gap-1 px-4 sm:px-5 py-2 sm:py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
             <span className="text-xl sm:text-2xl font-black">
               {result?.outcome === 'draw'
                 ? '🤷 Board Full — It’s a Draw!'
@@ -100,29 +100,29 @@ export const ConnectFourBoard: React.FC<ConnectFourBoardProps> = ({
         )}
       </div>
 
-      {/* Column Drop Touch Targets - Expanded for Tablet & Desktop */}
-      <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5 w-full max-w-[min(96vw,600px)] px-1 sm:px-3">
+      {/* Column Drop Touch Targets - Aligned Exactly with 7 Columns Below */}
+      <div className="grid grid-cols-7 gap-1 sm:gap-2.5 w-full max-w-[600px] px-[9px] sm:px-[21px] min-w-0">
         {Array.from({ length: C4_COLS }).map((_, c) => (
           <button
             key={c}
             type="button"
             disabled={isFinished || (!isMyTurn && session.mode === 'online') || grid[0][c] !== null}
             onClick={() => handleColClick(c)}
-            className="w-full py-2 sm:py-2.5 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 sm:border-3 border-[var(--arcade-ink)] rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
+            className="w-full py-1.5 sm:py-2.5 bg-[#2bb5d4] hover:bg-[#ffc233] text-white hover:text-[#2b2140] border-2 sm:border-3 border-[var(--arcade-ink)] rounded-lg sm:rounded-xl font-bold flex items-center justify-center transition-all disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow-[2px_2px_0_var(--arcade-ink)] cursor-pointer"
             aria-label={`Drop disc in column ${c + 1}`}
           >
-            <GoogleIcon name="arrow_downward" size={18} />
+            <GoogleIcon name="arrow_downward" size={16} />
           </button>
         ))}
       </div>
 
       {/* 6x7 Arcade Board - Substantially Larger on Desktop while Covering Most Phone Screen */}
       <div
-        className={`p-2 sm:p-4 bg-[#2455d6] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full max-w-[min(96vw,600px)] ${
+        className={`p-1.5 sm:p-4 bg-[#2455d6] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl sm:rounded-3xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full max-w-[600px] min-w-0 ${
           shaking ? 'arcade-shake' : ''
         }`}
       >
-        <div className="grid grid-cols-7 gap-1.5 sm:gap-2.5">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2.5">
           {grid.map((row, r) =>
             row.map((cell, c) => {
               const winning = isCellWinning(r, c);

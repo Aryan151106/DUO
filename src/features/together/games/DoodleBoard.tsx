@@ -229,11 +229,11 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(98vw,860px)] mx-auto space-y-3 px-1 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[840px] mx-auto space-y-2.5 sm:space-y-3 min-w-0">
       {/* Header Info */}
-      <div className="w-full text-center">
+      <div className="w-full text-center min-w-0">
         {!isFinished ? (
-          <div className="inline-flex flex-col items-center gap-1 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)]">
+          <div className="inline-flex flex-col items-center gap-1 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)]">
             <span className="font-bold text-xs sm:text-base text-[var(--arcade-ink)]">
               {drawerPlayer.displayName} draws 🎨 • {guesserPlayer.displayName} guesses 🧐
             </span>
@@ -244,8 +244,8 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
             )}
           </div>
         ) : (
-          <div className="inline-flex flex-col items-center gap-1 px-5 py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
-            <span className="text-xl sm:text-2xl font-black">
+          <div className="inline-flex flex-col items-center gap-1 px-4 sm:px-5 py-2 sm:py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
+            <span className="text-lg sm:text-2xl font-black">
               🎉 Round Guessed! Word was {secretWord?.toUpperCase() || state.secretWordMasked}!
             </span>
           </div>
@@ -253,7 +253,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
       </div>
 
       {/* Secret Word Masked Banner */}
-      <div className="text-2xl sm:text-4xl font-black tracking-widest text-center py-1 text-[var(--arcade-ink)] select-none">
+      <div className="text-xl sm:text-4xl font-black tracking-widest text-center py-1 text-[var(--arcade-ink)] select-none">
         {state.secretWordMasked || '_ _ _ _'}
       </div>
 
@@ -277,14 +277,14 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
       {/* Canvas - Substantially Larger on Desktop while Covering Phone Screen */}
       {(!isOnline && localStage === 'pass-to-drawer') ? null : (
         <div
-          className={`w-full aspect-[4/3] sm:aspect-[16/10] max-w-[min(96vw,840px)] bg-white border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl overflow-hidden shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] relative ${
+          className={`w-full aspect-[4/3] sm:aspect-[16/10] max-w-[840px] bg-white border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl overflow-hidden shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] relative min-w-0 ${
             shakingCanvas ? 'arcade-shake' : ''
           }`}
         >
           <canvas
             ref={canvasRef}
             width={840}
-            height={525}
+            height={630}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
@@ -297,7 +297,7 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
 
       {/* Drawing Toolbar (Only active for Drawer) */}
       {isDrawer && !isFinished && (
-        <div className="flex items-center justify-between gap-2 w-full max-w-[min(96vw,840px)] px-1 flex-wrap">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-2 w-full max-w-[840px] px-0.5 sm:px-1 flex-wrap min-w-0">
           <div className="flex items-center gap-1.5 sm:gap-2">
             {PALETTE.map((color) => (
               <button
@@ -338,28 +338,28 @@ export const DoodleBoard: React.FC<DoodleBoardProps> = ({
 
       {/* Guesser Toolbar & Input */}
       {isGuesser && !isFinished && (
-        <div className="w-full max-w-[min(96vw,840px)] space-y-2">
+        <div className="w-full max-w-[840px] space-y-2 min-w-0">
           {guessFeedback && (
             <p className="text-center font-bold text-xs sm:text-sm text-[var(--arcade-ink)] animate-bounce">
               {guessFeedback}
             </p>
           )}
 
-          <form onSubmit={handleGuessSubmit} className="flex items-center gap-2">
+          <form onSubmit={handleGuessSubmit} className="flex items-center gap-1.5 sm:gap-2 min-w-0">
             <input
               type="text"
               value={guessInput}
               onChange={(e) => setGuessInput(e.target.value)}
               placeholder="What on earth is that? Guess here…"
-              className="flex-1 p-2.5 sm:p-3 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-xl font-bold text-sm sm:text-base text-[var(--arcade-ink)] shadow-[2px_2px_0_var(--arcade-ink)] outline-none focus:ring-2 focus:ring-[#2bb5d4]"
+              className="flex-1 min-w-[120px] p-2 sm:p-3 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-xl font-bold text-xs sm:text-base text-[var(--arcade-ink)] shadow-[2px_2px_0_var(--arcade-ink)] outline-none focus:ring-2 focus:ring-[#2bb5d4]"
             />
-            <button type="submit" className="arcade-btn arcade-btn-blue text-sm sm:text-base py-2.5 sm:py-3 px-5">
+            <button type="submit" className="arcade-btn arcade-btn-blue text-xs sm:text-base py-2 sm:py-3 px-3.5 sm:px-5 shrink-0">
               Guess! 🧐
             </button>
             <button
               type="button"
               onClick={onRequestHint}
-              className="arcade-btn py-2.5 sm:py-3 text-sm sm:text-base bg-[#ffc233]"
+              className="arcade-btn py-2 sm:py-3 text-xs sm:text-base bg-[#ffc233] shrink-0"
               title="Reveal one letter"
             >
               💡 Hint

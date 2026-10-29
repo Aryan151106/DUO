@@ -91,7 +91,11 @@ export const GamesArea: React.FC = () => {
   const currentJoke = MASCOT_JOKES[mascotQuoteIndex % MASCOT_JOKES.length];
 
   return (
-    <div className="silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto px-2 sm:px-4 py-2 sm:py-4 relative min-h-[600px]">
+    <div
+      className={`silly-arcade w-full max-w-5xl lg:max-w-6xl mx-auto ${
+        selectedGame ? 'px-1 sm:px-4' : 'px-2.5 sm:px-4'
+      } py-1.5 sm:py-4 relative min-h-[600px] min-w-0`}
+    >
       {/* Floating game decorations */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden select-none -z-0">
         {FLOATING_EMOJIS.slice(0, 8).map((emoji, i) => (
@@ -159,9 +163,9 @@ export const GamesArea: React.FC = () => {
 
         {/* ── Active Game View (Substantially Larger on Desktop & Phone) ── */}
         {selectedGame ? (
-          <div className="arcade-card p-3 sm:p-6 w-full max-w-full sm:max-w-3xl lg:max-w-4xl mx-auto space-y-4 shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[7px_7px_0_var(--arcade-ink)]">
+          <div className="arcade-card px-1 py-2 sm:p-6 w-full max-w-full sm:max-w-3xl lg:max-w-4xl mx-auto space-y-2.5 sm:space-y-4 shadow-[3px_3px_0_var(--arcade-ink)] sm:shadow-[7px_7px_0_var(--arcade-ink)] min-w-0">
             {/* Top Bar with Mode Indicator & Exit */}
-            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-3 px-1">
+            <div className="flex items-center justify-between border-b-2 border-[var(--arcade-ink)] pb-2 px-1 gap-1.5 flex-wrap sm:flex-nowrap min-w-0">
               <div className="flex items-center gap-2">
                 <span className="text-2xl sm:text-3xl">
                   {GAMES_LIST.find((g) => g.type === selectedGame)?.icon}

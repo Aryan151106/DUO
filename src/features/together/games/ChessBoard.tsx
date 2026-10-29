@@ -114,13 +114,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   };
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[min(98vw,640px)] mx-auto space-y-2.5 relative px-1 sm:px-0">
+    <div className="flex flex-col items-center w-full max-w-[580px] mx-auto space-y-2 sm:space-y-2.5 relative min-w-0">
       {/* Header Info */}
-      <div className="w-full text-center">
+      <div className="w-full text-center min-w-0">
         {!isFinished ? (
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-sm sm:text-base">
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-[var(--arcade-card)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[3px_3px_0_var(--arcade-ink)] font-bold text-xs sm:text-base">
             <span
-              className={`w-4 h-4 rounded-full border-2 border-[var(--arcade-ink)] inline-block ${
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full border-2 border-[var(--arcade-ink)] inline-block ${
                 turn === 'w' ? 'bg-[#fff4d9]' : 'bg-[#6a4fb0]'
               }`}
             />
@@ -138,8 +138,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
             )}
           </div>
         ) : (
-          <div className="inline-flex flex-col items-center gap-1 px-5 py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
-            <span className="text-xl sm:text-2xl font-black">
+          <div className="inline-flex flex-col items-center gap-1 px-4 sm:px-5 py-2 sm:py-3 bg-[var(--arcade-c)] border-[3px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)]">
+            <span className="text-lg sm:text-2xl font-black">
               {state.isCheckmate
                 ? `👑 Checkmate! ${result?.winnerName || 'Winner'} Wins!`
                 : '🤝 Draw! Stalemate!'}
@@ -152,17 +152,17 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       </div>
 
       {/* Captured Pieces Graveyard Top */}
-      <div className="flex items-center justify-between w-full px-2 text-xs font-bold text-[var(--arcade-ink)]">
-        <div className="flex items-center gap-1 flex-wrap max-w-[240px]">
+      <div className="flex items-center justify-between w-full px-1 text-xs font-bold text-[var(--arcade-ink)] min-w-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap max-w-[200px] sm:max-w-[240px]">
           {state.capturedBlack?.map((p, i) => (
-            <span key={i} className="w-5 h-5 sm:w-6 sm:h-6 inline-block opacity-85">
+            <span key={i} className="w-4 h-4 sm:w-6 sm:h-6 inline-block opacity-85">
               <GoofyChessPiece type={p} isWhite={false} />
             </span>
           ))}
         </div>
-        <div className="flex items-center gap-1 flex-wrap max-w-[240px] justify-end">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-wrap max-w-[200px] sm:max-w-[240px] justify-end">
           {state.capturedWhite?.map((p, i) => (
-            <span key={i} className="w-5 h-5 sm:w-6 sm:h-6 inline-block opacity-85">
+            <span key={i} className="w-4 h-4 sm:w-6 sm:h-6 inline-block opacity-85">
               <GoofyChessPiece type={p} isWhite={true} />
             </span>
           ))}
@@ -170,7 +170,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       </div>
 
       {/* 8x8 Chessboard - Substantially Larger on Desktop while Covering Most Phone Screen */}
-      <div className="relative p-2 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[5px_5px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[min(96vw,580px)]">
+      <div className="relative p-1 sm:p-3 bg-[#2b2140] border-[3px] sm:border-[5px] border-[var(--arcade-ink)] rounded-2xl shadow-[4px_4px_0_var(--arcade-ink)] sm:shadow-[8px_8px_0_var(--arcade-ink)] w-full aspect-square max-w-[580px] min-w-0">
         {/* Floating Capture Speech Bubble */}
         {capturedBubble && (
           <div className="arcade-speech-bubble top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
